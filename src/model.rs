@@ -1,7 +1,8 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ThreatReport {
+    pub queried_at: String,
     pub ip: String,
     pub ipapi: Option<IPAPISummary>,
     pub shodan: Option<ShodanSummary>,
@@ -12,7 +13,7 @@ pub struct ThreatReport {
     pub threatfox: Option<ThreatFoxSummary>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct IPAPISummary {
     pub country: Option<String>,
     pub region: Option<String>,
@@ -22,7 +23,7 @@ pub struct IPAPISummary {
     pub asn: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ServiceInfo {
     pub port: u16,
     pub transport: Option<String>,
@@ -30,7 +31,7 @@ pub struct ServiceInfo {
     pub version: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ShodanSummary {
     pub org: Option<String>,
     pub isp: Option<String>,
@@ -42,7 +43,7 @@ pub struct ShodanSummary {
     pub vulns: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AbuseIPDBSummary {
     pub abuse_confidence: u8,
     pub total_reports: u32,
@@ -55,7 +56,7 @@ pub struct AbuseIPDBSummary {
     pub is_whitelisted: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct VirusTotalSummary {
     pub malicious: u32,
     pub suspicious: u32,
@@ -64,13 +65,13 @@ pub struct VirusTotalSummary {
     pub last_analysis_date: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OTXSummary {
     pub pulse_count: u32,
     pub pulse_names: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct GreyNoiseSummary {
     pub noise: bool,
     pub riot: bool,
@@ -79,13 +80,13 @@ pub struct GreyNoiseSummary {
     pub last_seen: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ThreatFoxSummary {
     pub ioc_count: usize,
     pub iocs: Vec<ThreatFoxIOC>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ThreatFoxIOC {
     pub ioc: String,
     pub threat_type: String,
