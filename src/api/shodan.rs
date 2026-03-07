@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
-use crate::model::ShodanSummary;
+use crate::model::{ServiceInfo, ShodanSummary};
 
 #[derive(Deserialize)]
 struct ShodanResponse {
@@ -12,6 +12,15 @@ struct ShodanResponse {
     hostnames: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     vulns: Option<HashMap<String, serde_json::Value>>,
+    data: Option<Vec<ShodanService>>,
+}
+
+#[derive(Deserialize)]
+struct ShodanService {
+    port: u16,
+    transport: Option<String>,
+    product: Option<String>,
+    version: Option<String>,
 }
 
 pub async fn fetch_shodan(ip: &str, key: &str) -> Result<ShodanSummary> {
@@ -36,11 +45,25 @@ pub async fn fetch_shodan(ip: &str, key: &str) -> Result<ShodanSummary> {
         .map(|m| m.into_keys().collect())
         .unwrap_or_default();
 
+    let mut services: Vec<ServiceInfo> = data
+        .data
+        .unwrap_or_default()
+        .into_iter()
+        .map(|s| ServiceInfo {
+            port: s.port,
+            transport: s.transport,
+            product: s.product,
+            version: s.version,
+        })
+        .collect();
+    services.sort_by_key(|s| s.port);
+
     Ok(ShodanSummary {
         org: data.org,
         isp: data.isp,
         country: data.country_name,
         open_ports,
+        services,
         hostnames: data.hostnames.unwrap_or_default(),
         tags: data.tags.unwrap_or_default(),
         vulns,

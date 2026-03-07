@@ -12,6 +12,7 @@ use api::{
     ipapi::fetch_ipapi,
     otx::fetch_otx,
     shodan::fetch_shodan,
+    threatfox::fetch_threatfox,
     virustotal::fetch_virustotal,
 };
 use cli::Cli;
@@ -29,7 +30,7 @@ async fn main() -> Result<()> {
 
     let ip = cli.ip.as_str();
 
-    let (ipapi_res, shodan_res, abuse_res, vt_res, otx_res, gn_res) = tokio::join!(
+    let (ipapi_res, shodan_res, abuse_res, vt_res, otx_res, gn_res, tf_res) = tokio::join!(
         fetch_ipapi(ip),
         async {
             match shodan_key.as_deref() {
@@ -56,6 +57,7 @@ async fn main() -> Result<()> {
             }
         },
         fetch_greynoise(ip, gn_key.as_deref()),
+        fetch_threatfox(ip),
     );
 
     let report = ThreatReport {
@@ -66,6 +68,7 @@ async fn main() -> Result<()> {
         virustotal: vt_res.ok(),
         otx: otx_res.ok(),
         greynoise: gn_res.ok(),
+        threatfox: tf_res.ok(),
     };
 
     if cli.json {

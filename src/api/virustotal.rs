@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use crate::model::VirusTotalSummary;
 
@@ -15,6 +16,7 @@ struct VTData {
 #[derive(Deserialize)]
 struct VTAttributes {
     last_analysis_stats: VTStats,
+    last_analysis_date: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -42,12 +44,20 @@ pub async fn fetch_virustotal(ip: &str, key: &str) -> Result<VirusTotalSummary> 
     }
 
     let data: VTResponse = resp.json().await.context("Failed to parse VirusTotal response")?;
-    let s = data.data.attributes.last_analysis_stats;
+    let attrs = data.data.attributes;
+    let s = attrs.last_analysis_stats;
+
+    let last_analysis_date = attrs.last_analysis_date.and_then(|ts| {
+        Utc.timestamp_opt(ts, 0)
+            .single()
+            .map(|d| d.format("%Y-%m-%d").to_string())
+    });
 
     Ok(VirusTotalSummary {
         malicious: s.malicious,
         suspicious: s.suspicious,
         harmless: s.harmless,
         undetected: s.undetected,
+        last_analysis_date,
     })
 }
