@@ -39,14 +39,54 @@ You need free accounts for both services:
 | Shodan | https://account.shodan.io/register | API Key (free tier available) |
 | AbuseIPDB | https://www.abuseipdb.com/register | API Key (free tier: 1,000 checks/day) |
 
-Export the keys in your shell before running:
+### Setting your API keys securely
+
+Avoid typing `export KEY=value` directly in your terminal — the command gets saved to your shell history (`~/.zsh_history`, `~/.bash_history`) in plaintext.
+
+**Recommended: add to your shell profile in an editor**
+
+Open `~/.zshrc` (or `~/.bashrc`) in a text editor and add:
 
 ```bash
 export SHODAN_API_KEY=your_shodan_key_here
 export ABUSEIPDB_API_KEY=your_abuseipdb_key_here
 ```
 
-Or add them to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to persist across sessions.
+Then lock down the file so only your user can read it:
+
+```bash
+chmod 600 ~/.zshrc
+```
+
+Reload to apply:
+
+```bash
+source ~/.zshrc
+```
+
+**Alternative: inline per-command (never stored in history)**
+
+Prefix the command directly — keys never touch your history:
+
+```bash
+SHODAN_API_KEY=abc ABUSEIPDB_API_KEY=xyz scope-recon 8.8.8.8
+```
+
+> In zsh, set `HIST_IGNORE_SPACE` and prefix the command with a leading space to suppress history recording for that line.
+
+**Alternative: use a secrets manager**
+
+Tools like [`pass`](https://www.passwordstore.org/), [1Password CLI](https://developer.1password.com/docs/cli/) (`op run --`), or Bitwarden CLI can inject secrets at runtime without them residing in any config file:
+
+```bash
+op run -- scope-recon 8.8.8.8
+```
+
+**What to avoid**
+
+- Typing `export KEY=value` in the terminal (saved to history)
+- Storing keys in a `.env` file inside a git repository
+- Sharing terminal screenshots that include `printenv` or `env` output
 
 ## Usage
 
