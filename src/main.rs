@@ -13,6 +13,7 @@ mod cache;
 mod cli;
 mod model;
 mod output;
+mod tui;
 
 use api::{
     abuseipdb::fetch_abuseipdb,
@@ -63,6 +64,17 @@ async fn main() -> Result<()> {
 
     let targets = resolve_targets(&cli)?;
     let keys = ApiKeys::from_env();
+
+    // TUI mode: single IP, no --json/--output/--file flags
+    let use_tui = cli.target.is_some()
+        && !cli.json
+        && cli.output.is_none()
+        && cli.file.is_none()
+        && targets.len() == 1;
+
+    if use_tui {
+        return tui::run_tui(&targets[0], &keys, &cli).await;
+    }
 
     let mut writer: Box<dyn Write> = match &cli.output {
         Some(path) => Box::new(BufWriter::new(

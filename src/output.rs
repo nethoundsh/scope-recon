@@ -225,7 +225,7 @@ fn print_summary(report: &ThreatReport, w: &mut dyn Write) {
     ln(w, String::new());
 }
 
-fn compute_verdict(report: &ThreatReport) -> (&'static str, Vec<String>) {
+pub fn compute_verdict(report: &ThreatReport) -> (&'static str, Vec<String>) {
     let mut findings: Vec<String> = Vec::new();
     let mut severity: u8 = 0;
 

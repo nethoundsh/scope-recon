@@ -1,19 +1,20 @@
 # scope-recon
 
-A fast Rust CLI tool that queries multiple threat intelligence sources concurrently for a given IP address and prints a unified threat summary to the terminal.
+A fast Rust CLI tool that queries multiple threat intelligence sources concurrently for a given IP address. Single-IP lookups open a live **ratatui TUI** where results populate in real time as each API call completes. Bulk and JSON modes output to the terminal or a file unchanged.
 
 ## Features
 
+- **Live TUI** for single-IP lookups — sources populate with animated spinners as concurrent API calls finish; verdict updates in real time
 - Seven concurrent API lookups with no sequential waiting
-- Synthesized **SUMMARY** verdict (CLEAN / SUSPICIOUS / MALICIOUS) at the top of every report
-- Graceful degradation — missing keys or failed sources show `[source unavailable]`, the rest still display
-- `--verbose` flag reveals exactly why each source failed
-- `--only` flag to query a subset of sources for speed
+- Synthesized **SUMMARY** verdict (CLEAN / SUSPICIOUS / MALICIOUS) recomputed live in the TUI header as each source arrives
+- Graceful degradation — missing keys or failed sources show `[source unavailable]` / `✗`, the rest still display
+- `--verbose` flag reveals exactly why each source failed (CLI/JSON mode)
+- `--only` flag to query a subset of sources; skipped sources show `-` in the TUI
 - `--no-color` flag for clean file output
 - `--output` to write results directly to a file
 - Bulk mode via `--file ips.txt` — processes a list of IPs/CIDRs with rate-limit courtesy delays
 - CIDR range support — `scope-recon 10.0.0.0/28` expands and queries each host (max 256)
-- On-disk caching under `~/.cache/scope-recon/` with configurable TTL
+- On-disk caching under `~/.cache/scope-recon/` with configurable TTL; `r` in the TUI bypasses cache and re-queries all sources
 - Shodan InternetDB fallback when no Shodan API key is set (free, no key required)
 - `queried_at` timestamp on every report for audit trails and cache freshness checks
 - `--json` flag for machine-readable output; bulk JSON output is a JSON array
@@ -30,6 +31,50 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 | 2 | [AbuseIPDB](https://www.abuseipdb.com) | Abuse confidence score, report history | Yes |
 | 3 | [GreyNoise](https://greynoise.io) | Internet noise vs. targeted activity | Optional |
 | 3 | [ThreatFox](https://threatfox.abuse.ch) | Malware C2 IOC matching | No |
+
+## TUI Interface
+
+Running `scope-recon <IP>` without `--json`, `--output`, or `--file` opens a full-screen terminal UI:
+
+```
+┌─ scope-recon ──────────────────────────────────────────────────────┐
+│  IP: 8.8.8.8                              VERDICT: ● CLEAN         │
+├──────────────────┬─────────────────────────────────────────────────┤
+│ SOURCES          │ GEOLOCATION  (ip-api.com)                       │
+│                  │                                                  │
+│ ▶ Geolocation ✓  │   Country:    United States                      │
+│   Shodan      ⠸  │   Region:     Virginia                           │
+│   AbuseIPDB   ✓  │   City:       Ashburn                            │
+│   VirusTotal  ✓  │   ISP:        Google LLC                         │
+│   OTX         ✗  │   Org:        Google Public DNS                  │
+│   GreyNoise   ✓  │   ASN:        AS15169 Google LLC                 │
+│   ThreatFox   ✓  │                                                  │
+├──────────────────┴─────────────────────────────────────────────────┤
+│  q quit   ↑↓/jk navigate   PgUp/PgDn scroll detail   r refresh    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Status icons**
+
+| Icon | Meaning |
+|---|---|
+| `⠋⠙⠸…` (animated) | Loading |
+| `✓` green | Done |
+| `✗` red | Error / key not set |
+| `-` dim | Skipped (`--only` filter) |
+
+**Keybindings**
+
+| Key | Action |
+|---|---|
+| `q` / `Ctrl-C` | Quit |
+| `↑` / `k` | Select previous source |
+| `↓` / `j` | Select next source |
+| `PgUp` / `[` | Scroll detail pane up |
+| `PgDn` / `]` | Scroll detail pane down |
+| `r` | Re-query all sources (bypasses cache) |
+
+The TUI activates only for single-IP interactive use. All other modes (`--json`, `--file`, `--output`, CIDR ranges) use the original CLI output path unchanged.
 
 ## Installation
 
@@ -142,63 +187,7 @@ Options:
 scope-recon 8.8.8.8
 ```
 
-```
-IP: 8.8.8.8
-══════════════════════════════════
-
-SUMMARY
-  Verdict:         CLEAN
-  Findings:        whitelisted on AbuseIPDB · benign per GreyNoise · 0 VT detections
-
-══════════════════════════════════
-
-GEOLOCATION  (ip-api.com)
-  Country:         United States
-  Region:          Virginia
-  City:            Ashburn
-  ISP:             Google LLC
-  Org:             Google Public DNS
-  ASN:             AS15169 Google LLC
-
-SHODAN
-  Org:             Google LLC
-  ISP:             Google LLC
-  Country:         United States
-  Hostnames:       dns.google
-  Tags:            -
-  Vulns:           -
-  Services:
-    53/udp     -
-    443/tcp    nginx 1.14.0
-
-ABUSEIPDB
-  Abuse Score:     0/100  [LOW]
-  Reports:         53
-  Last Reported:   2024-10-15
-  Usage Type:      Search Engine Spider
-  Country:         US
-  Domain:          google.com
-  ISP:             Google LLC
-  Tor Exit:        No
-  Whitelisted:     Yes
-
-VIRUSTOTAL
-  0 malicious / 0 suspicious / 59 harmless / 35 undetected
-  Last Scanned:    2026-03-06
-
-ALIENVAULT OTX
-  Pulses:          0
-
-GREYNOISE
-  Noise:           No
-  RIOT:            Yes
-  Class:           benign
-  Actor:           Google Public DNS
-  Last Seen:       2026-03-07
-
-THREATFOX  (abuse.ch)
-  C2 IOCs:         0
-```
+Opens the TUI (see [TUI Interface](#tui-interface) above). Sources populate live with animated spinners; navigate with `↑↓` or `jk` to inspect each source's detail pane. Press `q` to quit, `r` to refresh.
 
 ### Bulk mode
 
@@ -415,12 +404,17 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 scope-recon/
 ├── Cargo.toml
 └── src/
-    ├── main.rs           # CLI dispatch, bulk/CIDR expansion, cache integration,
-    │                     # concurrent query orchestration, tests
+    ├── main.rs           # CLI dispatch, TUI mode detection, bulk/CIDR expansion,
+    │                     # cache integration, concurrent query orchestration, tests
     ├── cli.rs            # Clap CLI struct and all flags
     ├── model.rs          # ThreatReport and all summary structs (Serialize + Deserialize)
     ├── cache.rs          # On-disk cache load/save with TTL, tests
-    ├── output.rs         # pretty_print(), json_print(), verdict computation
+    ├── output.rs         # pretty_print(), json_print(), compute_verdict()
+    ├── tui/
+    │   ├── mod.rs        # run_tui(), terminal setup/teardown, tokio::select! event loop,
+    │   │                 # spawn_queries() — one task per source
+    │   ├── app.rs        # App state, SourceState<T>, SourceUpdate, handle_key(), apply_update()
+    │   └── ui.rs         # render() — header, source list, detail pane, footer
     └── api/
         ├── mod.rs
         ├── retry.rs      # Generic 429-aware retry wrapper

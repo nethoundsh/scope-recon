@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use clap::Parser;
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(
     name = "scope-recon",
     about = "IP threat summary from Shodan, VirusTotal, AbuseIPDB, OTX, GreyNoise, and ThreatFox"
