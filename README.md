@@ -18,7 +18,7 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 - Shodan InternetDB fallback when no Shodan API key is set (free, no key required)
 - `queried_at` timestamp on every report for audit trails and cache freshness checks
 - `--json` flag for machine-readable output; bulk JSON output is a JSON array
-- No API key required for geolocation (ip-api.com), C2 lookups (ThreatFox), BGP routing data (BGPView), or basic port data (Shodan InternetDB)
+- No API key required for geolocation (ip-api.com), BGP routing data (RIPE Stat), or basic port data (Shodan InternetDB)
 - IPinfo works without a token (rate-limited); set `IPINFO_TOKEN` for 50k req/month
 
 ## API Sources
@@ -54,6 +54,10 @@ Running `scope-recon <IP>` without `--json`, `--output`, or `--file` opens a ful
 │   OTX         ✗  │   Org:        Google Public DNS                  │
 │   GreyNoise   ✓  │   ASN:        AS15169 Google LLC                 │
 │   ThreatFox   ✓  │                                                  │
+│   BGPView     ✓  │                                                  │
+│   IPQS        ✗  │                                                  │
+│   Pulsedive   ✗  │                                                  │
+│   IPInfo      ✓  │                                                  │
 ├──────────────────┴─────────────────────────────────────────────────┤
 │  q quit   ↑↓/jk navigate   PgUp/PgDn scroll detail   r refresh    │
 └────────────────────────────────────────────────────────────────────┘
@@ -297,8 +301,8 @@ warning: VirusTotal rate limited (429) — retrying in 2s...
 
 | Verdict | Triggers |
 |---|---|
-| `MALICIOUS` | Any VT malicious detections · AbuseIPDB score ≥ 75 · GreyNoise classification = malicious · ThreatFox C2 IOC match |
-| `SUSPICIOUS` | VT suspicious detections only · AbuseIPDB score 25–74 · OTX pulses with no harder signal |
+| `MALICIOUS` | Any VT malicious detections · AbuseIPDB score ≥ 75 · GreyNoise classification = malicious · ThreatFox C2 IOC match · IPQS fraud score ≥ 75 · Pulsedive risk = high/critical |
+| `SUSPICIOUS` | VT suspicious detections only · AbuseIPDB score 25–74 · OTX pulses with no harder signal · IPQS fraud score 30–74 · Pulsedive risk = medium |
 | `CLEAN` | None of the above; positive signals (whitelisted, RIOT, 0 detections) listed |
 
 ### Color coding
@@ -367,7 +371,45 @@ scope-recon 8.8.8.8 --json
     "name": "Google Public DNS",
     "last_seen": "2026-03-07"
   },
-  "threatfox": { "ioc_count": 0, "iocs": [] }
+  "threatfox": { "ioc_count": 0, "iocs": [] },
+  "bgpview": {
+    "asn": 15169,
+    "asn_name": "GOOGLE",
+    "asn_description": "Google LLC",
+    "country_code": "US",
+    "ptr_record": "dns.google",
+    "prefixes": ["8.8.8.0/24"],
+    "rir": "ARIN"
+  },
+  "ipqs": {
+    "fraud_score": 0,
+    "proxy": false,
+    "vpn": false,
+    "tor": false,
+    "bot_status": false,
+    "recent_abuse": false,
+    "abuse_velocity": "none",
+    "isp": "Google LLC",
+    "country_code": "US"
+  },
+  "pulsedive": {
+    "risk": "none",
+    "last_seen": null,
+    "threats": [],
+    "feeds": []
+  },
+  "ipinfo": {
+    "hostname": "dns.google",
+    "city": "Mountain View",
+    "region": "California",
+    "country": "US",
+    "org": "AS15169 Google LLC",
+    "timezone": "America/Los_Angeles",
+    "is_vpn": null,
+    "is_proxy": null,
+    "is_tor": null,
+    "is_hosting": null
+  }
 }
 ```
 
@@ -445,8 +487,8 @@ scope-recon/
         ├── virustotal.rs # VirusTotal vendor consensus, last analysis date
         ├── otx.rs        # AlienVault OTX pulse/campaign correlation
         ├── greynoise.rs  # GreyNoise noise vs. targeted classification
-        ├── threatfox.rs  # ThreatFox malware C2 IOC matching (no key)
-        ├── bgpview.rs    # BGPView BGP routing, ASN, prefix, PTR (no key)
+        ├── threatfox.rs  # ThreatFox malware C2 IOC matching (free key required)
+        ├── bgpview.rs    # RIPE Stat BGP routing, ASN, prefix (no key)
         ├── ipqs.rs       # IPQualityScore fraud/proxy/VPN/bot detection
         ├── pulsedive.rs  # Pulsedive aggregated risk and threat feeds
         └── ipinfo.rs     # IPinfo hostname, org, timezone, privacy flags
