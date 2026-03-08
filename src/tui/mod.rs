@@ -279,11 +279,15 @@ async fn spawn_queries(
         let ip = ip.to_string();
         let tx = tx.clone();
         let should = should_run(only, "threatfox");
+        let key = keys.threatfox.clone();
         tokio::spawn(async move {
             let result = if !should {
                 Err(anyhow::anyhow!("__skipped__"))
             } else {
-                with_retry("ThreatFox", RETRY_DELAY, || fetch_threatfox(&ip)).await
+                match key.as_deref() {
+                    Some(k) => with_retry("ThreatFox", RETRY_DELAY, || fetch_threatfox(&ip, k)).await,
+                    None => Err(anyhow::anyhow!("THREATFOX_API_KEY not set")),
+                }
             };
             let _ = tx.send(SourceUpdate::ThreatFox(result)).await;
         });

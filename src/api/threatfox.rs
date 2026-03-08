@@ -18,15 +18,17 @@ struct TFRecord {
     last_seen: Option<String>,
 }
 
-pub async fn fetch_threatfox(ip: &str) -> Result<ThreatFoxSummary> {
+pub async fn fetch_threatfox(ip: &str, key: &str) -> Result<ThreatFoxSummary> {
     let client = reqwest::Client::new();
     let body = serde_json::json!({
         "query": "search_ioc",
-        "search_term": ip
+        "search_term": ip,
+        "exact_match": true
     });
 
     let resp = client
         .post("https://threatfox-api.abuse.ch/api/v1/")
+        .header("Auth-Key", key)
         .json(&body)
         .send()
         .await
@@ -40,8 +42,11 @@ pub async fn fetch_threatfox(ip: &str) -> Result<ThreatFoxSummary> {
 
     let parsed: TFResponse = resp.json().await.context("Failed to parse ThreatFox response")?;
 
-    if parsed.query_status != "ok" {
-        return Ok(ThreatFoxSummary { ioc_count: 0, iocs: vec![] });
+    match parsed.query_status.as_str() {
+        "ok" => {}
+        "no_results" => return Ok(ThreatFoxSummary { ioc_count: 0, iocs: vec![] }),
+        "unknown_auth_key" => anyhow::bail!("ThreatFox: invalid Auth-Key"),
+        other => anyhow::bail!("ThreatFox query_status: {}", other),
     }
 
     let records: Vec<TFRecord> = match parsed.data {

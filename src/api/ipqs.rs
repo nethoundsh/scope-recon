@@ -20,7 +20,7 @@ struct IpqsResponse {
 
 pub async fn fetch_ipqs(ip: &str, key: &str) -> Result<IPQSSummary> {
     let url = format!(
-        "https://ipqualityscore.com/api/json/ip/{}/{}?strictness=1",
+        "https://ipqualityscore.com/api/json/ip/{}/{}",
         key, ip
     );
     let resp = reqwest::get(&url)

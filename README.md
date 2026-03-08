@@ -31,8 +31,8 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 | 2 | [AlienVault OTX](https://otx.alienvault.com) | Threat campaigns, pulse correlation | Yes |
 | 2 | [AbuseIPDB](https://www.abuseipdb.com) | Abuse confidence score, report history | Yes |
 | 3 | [GreyNoise](https://greynoise.io) | Internet noise vs. targeted activity | Optional |
-| 3 | [ThreatFox](https://threatfox.abuse.ch) | Malware C2 IOC matching | No |
-| 4 | [BGPView](https://bgpview.io) | BGP routing, ASN, prefix, PTR record | No |
+| 3 | [ThreatFox](https://threatfox.abuse.ch) | Malware C2 IOC matching | Yes (free) |
+| 4 | [RIPE Stat](https://stat.ripe.net) | BGP routing, ASN, prefix | No |
 | 4 | [IPQualityScore](https://ipqualityscore.com) | Fraud score, VPN/proxy/TOR/bot detection | Yes |
 | 4 | [Pulsedive](https://pulsedive.com) | Aggregated risk level, threat feed names | Yes |
 | 4 | [IPinfo](https://ipinfo.io) | Hostname, org, timezone; privacy flags (paid) | Optional |
@@ -112,11 +112,12 @@ Register for free accounts at each service:
 | AlienVault OTX | https://otx.alienvault.com |
 | AbuseIPDB | https://www.abuseipdb.com/register |
 | GreyNoise | https://www.greynoise.io (community tier) |
+| ThreatFox | https://auth.abuse.ch/ (abuse.ch Authentication Portal) |
 | IPQualityScore | https://www.ipqualityscore.com/create-account |
 | Pulsedive | https://pulsedive.com/register |
 | IPinfo | https://ipinfo.io/signup |
 
-ip-api.com, ThreatFox, and BGPView require no account or key. Shodan falls back to InternetDB (ports, hostnames, tags, vulns — no service banners) if `SHODAN_API_KEY` is not set. IPinfo works without a token (1,000 req/day shared limit); set `IPINFO_TOKEN` for 50,000 req/month. IPQualityScore and Pulsedive have free tiers (1,000 req/month and 250 req/day respectively).
+ip-api.com and RIPE Stat require no account or key. Shodan falls back to InternetDB (ports, hostnames, tags, vulns — no service banners) if `SHODAN_API_KEY` is not set. IPinfo works without a token (1,000 req/day shared limit); set `IPINFO_TOKEN` for 50,000 req/month. IPQualityScore and Pulsedive have free tiers (1,000 req/month and 250 req/day respectively).
 
 ### Setting your API keys securely
 
@@ -132,6 +133,7 @@ export VIRUSTOTAL_API_KEY=your_virustotal_key_here
 export OTX_API_KEY=your_otx_key_here
 export ABUSEIPDB_API_KEY=your_abuseipdb_key_here
 export GREYNOISE_API_KEY=your_greynoise_key_here   # optional
+export THREATFOX_API_KEY=your_threatfox_key_here
 export IPQS_API_KEY=your_ipqualityscore_key_here
 export PULSEDIVE_API_KEY=your_pulsedive_key_here
 export IPINFO_TOKEN=your_ipinfo_token_here         # optional
@@ -391,7 +393,7 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 | Network timeout / DNS failure | Source shown as `[source unavailable]`; tool continues |
 | GreyNoise 404 (IP not in dataset) | Shown as `class: not seen` rather than an error |
 | ThreatFox no results | Shows `C2 IOCs: 0`, not an error |
-| BGPView 404 (IP not in BGP table) | Returns empty result (no prefixes), not an error |
+| RIPE Stat (IP not announced) | Returns empty result (no prefixes), not an error |
 | Pulsedive unknown (IP not in database) | Shows `risk: unknown`, not an error |
 | IPinfo without token | Works with shared rate limit (1,000 req/day); privacy fields absent |
 | Shodan key not set | Falls back to InternetDB automatically (no key required) |
@@ -410,8 +412,8 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 | AlienVault OTX | No published hard limit on free tier |
 | AbuseIPDB | 1,000 checks/day |
 | GreyNoise | Community tier: limited daily lookups |
-| ThreatFox | No published limit; no key required |
-| BGPView | No published limit; no key required |
+| ThreatFox | No published limit; free key required |
+| RIPE Stat | No published limit; no key required |
 | IPQualityScore | 1,000 lookups/month (free tier) |
 | Pulsedive | 250 requests/day (free tier) |
 | IPinfo | 1,000 req/day unauthenticated; 50,000/month with free token |

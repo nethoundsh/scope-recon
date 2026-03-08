@@ -2,76 +2,95 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use crate::model::BGPViewSummary;
 
+// Uses RIPE Stat API (stat.ripe.net) — free, no key required
 #[derive(Deserialize)]
-struct BgpResponse {
-    data: BgpData,
+struct RipeResponse {
+    data: RipeData,
 }
 
 #[derive(Deserialize)]
-struct BgpData {
-    ptr_record: Option<String>,
-    prefixes: Vec<BgpPrefix>,
-    rir_allocation: Option<BgpRir>,
+struct RipeData {
+    announced: bool,
+    #[serde(default)]
+    asns: Vec<RipeAsn>,
+    resource: Option<String>,   // the matched prefix, e.g. "8.8.8.0/24"
+    block: Option<RipeBlock>,
 }
 
 #[derive(Deserialize)]
-struct BgpPrefix {
-    prefix: String,
-    asn: Option<BgpAsn>,
-}
-
-#[derive(Deserialize)]
-struct BgpAsn {
+struct RipeAsn {
     asn: u32,
-    name: Option<String>,
-    description: Option<String>,
-    country_code: Option<String>,
+    holder: Option<String>,     // e.g. "GOOGLE - Google LLC"
 }
 
 #[derive(Deserialize)]
-struct BgpRir {
-    rir_name: Option<String>,
+struct RipeBlock {
+    desc: Option<String>,       // e.g. "Administered by ARIN"
 }
 
 pub async fn fetch_bgpview(ip: &str) -> Result<BGPViewSummary> {
-    let url = format!("https://api.bgpview.io/ip/{}", ip);
+    let url = format!(
+        "https://stat.ripe.net/data/prefix-overview/data.json?resource={}",
+        ip
+    );
     let resp = reqwest::get(&url)
         .await
-        .context("BGPView request failed")?;
+        .context("RIPE Stat request failed")?;
 
-    if resp.status() == 404 {
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("RIPE Stat returned {}: {}", status, body);
+    }
+
+    let parsed: RipeResponse = resp
+        .json()
+        .await
+        .context("Failed to parse RIPE Stat response")?;
+    let d = parsed.data;
+
+    if !d.announced || d.asns.is_empty() {
         return Ok(BGPViewSummary {
             asn: None,
             asn_name: None,
             asn_description: None,
             country_code: None,
             ptr_record: None,
-            prefixes: vec![],
+            prefixes: d.resource.into_iter().collect(),
             rir: None,
         });
     }
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("BGPView returned {}: {}", status, body);
-    }
+    let first = &d.asns[0];
+    // holder format: "GOOGLE - Google LLC" → name="GOOGLE", description="Google LLC"
+    let (asn_name, asn_description) = match &first.holder {
+        Some(h) => {
+            if let Some(idx) = h.find(" - ") {
+                (
+                    Some(h[..idx].to_string()),
+                    Some(h[idx + 3..].to_string()),
+                )
+            } else {
+                (Some(h.clone()), None)
+            }
+        }
+        None => (None, None),
+    };
 
-    let data: BgpResponse = resp.json().await.context("Failed to parse BGPView response")?;
-    let d = data.data;
+    // Extract RIR from block desc: "Administered by ARIN" → "ARIN"
+    let rir = d.block.as_ref().and_then(|b| b.desc.as_ref()).and_then(|desc| {
+        desc.split_whitespace().last().map(|s| s.to_string())
+    });
 
-    // Take ASN info from the first prefix that has it
-    let first_asn = d.prefixes.iter().find_map(|p| p.asn.as_ref());
-
-    let prefixes: Vec<String> = d.prefixes.iter().map(|p| p.prefix.clone()).collect();
+    let prefixes = d.resource.into_iter().collect();
 
     Ok(BGPViewSummary {
-        asn: first_asn.map(|a| a.asn),
-        asn_name: first_asn.and_then(|a| a.name.clone()),
-        asn_description: first_asn.and_then(|a| a.description.clone()),
-        country_code: first_asn.and_then(|a| a.country_code.clone()),
-        ptr_record: d.ptr_record,
+        asn: Some(first.asn),
+        asn_name,
+        asn_description,
+        country_code: None,
+        ptr_record: None,
         prefixes,
-        rir: d.rir_allocation.and_then(|r| r.rir_name),
+        rir,
     })
 }

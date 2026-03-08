@@ -47,6 +47,7 @@ struct ApiKeys {
     ipqs: Option<String>,
     pulsedive: Option<String>,
     ipinfo: Option<String>,
+    threatfox: Option<String>,
 }
 
 impl ApiKeys {
@@ -60,6 +61,7 @@ impl ApiKeys {
             ipqs: std::env::var("IPQS_API_KEY").ok(),
             pulsedive: std::env::var("PULSEDIVE_API_KEY").ok(),
             ipinfo: std::env::var("IPINFO_TOKEN").ok(),
+            threatfox: std::env::var("THREATFOX_API_KEY").ok(),
         }
     }
 }
@@ -210,7 +212,10 @@ async fn query_ip(ip: &str, keys: &ApiKeys, cli: &Cli) -> (ThreatReport, Vec<(St
             if !should_run(only, "threatfox") {
                 return Err(anyhow::anyhow!("__skipped__"));
             }
-            with_retry("ThreatFox", RETRY_DELAY, || fetch_threatfox(ip)).await
+            match keys.threatfox.as_deref() {
+                Some(k) => with_retry("ThreatFox", RETRY_DELAY, || fetch_threatfox(ip, k)).await,
+                None => Err(anyhow::anyhow!("THREATFOX_API_KEY not set")),
+            }
         },
         async {
             if !should_run(only, "bgpview") {

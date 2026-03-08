@@ -34,6 +34,16 @@ pub async fn fetch_pulsedive(ip: &str, key: &str) -> Result<PulsediveSummary> {
         .await
         .context("Pulsedive request failed")?;
 
+    // 404 = IP not in Pulsedive database — treat as unknown, not an error
+    if resp.status() == 404 {
+        return Ok(PulsediveSummary {
+            risk: "unknown".to_string(),
+            last_seen: None,
+            threats: vec![],
+            feeds: vec![],
+        });
+    }
+
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
