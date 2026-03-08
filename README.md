@@ -5,7 +5,7 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 ## Features
 
 - **Live TUI** for single-IP lookups — sources populate with animated spinners as concurrent API calls finish; verdict updates in real time
-- Seven concurrent API lookups with no sequential waiting
+- Eleven concurrent API lookups with no sequential waiting
 - Synthesized **SUMMARY** verdict (CLEAN / SUSPICIOUS / MALICIOUS) recomputed live in the TUI header as each source arrives
 - Graceful degradation — missing keys or failed sources show `[source unavailable]` / `✗`, the rest still display
 - `--verbose` flag reveals exactly why each source failed (CLI/JSON mode)
@@ -18,7 +18,8 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 - Shodan InternetDB fallback when no Shodan API key is set (free, no key required)
 - `queried_at` timestamp on every report for audit trails and cache freshness checks
 - `--json` flag for machine-readable output; bulk JSON output is a JSON array
-- No API key required for geolocation (ip-api.com), C2 lookups (ThreatFox), or basic port data (Shodan InternetDB)
+- No API key required for geolocation (ip-api.com), C2 lookups (ThreatFox), BGP routing data (BGPView), or basic port data (Shodan InternetDB)
+- IPinfo works without a token (rate-limited); set `IPINFO_TOKEN` for 50k req/month
 
 ## API Sources
 
@@ -31,6 +32,10 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 | 2 | [AbuseIPDB](https://www.abuseipdb.com) | Abuse confidence score, report history | Yes |
 | 3 | [GreyNoise](https://greynoise.io) | Internet noise vs. targeted activity | Optional |
 | 3 | [ThreatFox](https://threatfox.abuse.ch) | Malware C2 IOC matching | No |
+| 4 | [BGPView](https://bgpview.io) | BGP routing, ASN, prefix, PTR record | No |
+| 4 | [IPQualityScore](https://ipqualityscore.com) | Fraud score, VPN/proxy/TOR/bot detection | Yes |
+| 4 | [Pulsedive](https://pulsedive.com) | Aggregated risk level, threat feed names | Yes |
+| 4 | [IPinfo](https://ipinfo.io) | Hostname, org, timezone; privacy flags (paid) | Optional |
 
 ## TUI Interface
 
@@ -107,8 +112,11 @@ Register for free accounts at each service:
 | AlienVault OTX | https://otx.alienvault.com |
 | AbuseIPDB | https://www.abuseipdb.com/register |
 | GreyNoise | https://www.greynoise.io (community tier) |
+| IPQualityScore | https://www.ipqualityscore.com/create-account |
+| Pulsedive | https://pulsedive.com/register |
+| IPinfo | https://ipinfo.io/signup |
 
-ip-api.com and ThreatFox require no account or key. Shodan will fall back to InternetDB (ports, hostnames, tags, vulns — no service banners) if `SHODAN_API_KEY` is not set.
+ip-api.com, ThreatFox, and BGPView require no account or key. Shodan falls back to InternetDB (ports, hostnames, tags, vulns — no service banners) if `SHODAN_API_KEY` is not set. IPinfo works without a token (1,000 req/day shared limit); set `IPINFO_TOKEN` for 50,000 req/month. IPQualityScore and Pulsedive have free tiers (1,000 req/month and 250 req/day respectively).
 
 ### Setting your API keys securely
 
@@ -124,6 +132,9 @@ export VIRUSTOTAL_API_KEY=your_virustotal_key_here
 export OTX_API_KEY=your_otx_key_here
 export ABUSEIPDB_API_KEY=your_abuseipdb_key_here
 export GREYNOISE_API_KEY=your_greynoise_key_here   # optional
+export IPQS_API_KEY=your_ipqualityscore_key_here
+export PULSEDIVE_API_KEY=your_pulsedive_key_here
+export IPINFO_TOKEN=your_ipinfo_token_here         # optional
 ```
 
 Then lock down the file so only your user can read it:
@@ -380,6 +391,9 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 | Network timeout / DNS failure | Source shown as `[source unavailable]`; tool continues |
 | GreyNoise 404 (IP not in dataset) | Shown as `class: not seen` rather than an error |
 | ThreatFox no results | Shows `C2 IOCs: 0`, not an error |
+| BGPView 404 (IP not in BGP table) | Returns empty result (no prefixes), not an error |
+| Pulsedive unknown (IP not in database) | Shows `risk: unknown`, not an error |
+| IPinfo without token | Works with shared rate limit (1,000 req/day); privacy fields absent |
 | Shodan key not set | Falls back to InternetDB automatically (no key required) |
 | Invalid IP or hostname passed | Rejected immediately before any API calls |
 | CIDR range exceeds 256 hosts | Rejected with a clear error message |
@@ -397,6 +411,10 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 | AbuseIPDB | 1,000 checks/day |
 | GreyNoise | Community tier: limited daily lookups |
 | ThreatFox | No published limit; no key required |
+| BGPView | No published limit; no key required |
+| IPQualityScore | 1,000 lookups/month (free tier) |
+| Pulsedive | 250 requests/day (free tier) |
+| IPinfo | 1,000 req/day unauthenticated; 50,000/month with free token |
 
 ## Project Structure
 
@@ -425,7 +443,11 @@ scope-recon/
         ├── virustotal.rs # VirusTotal vendor consensus, last analysis date
         ├── otx.rs        # AlienVault OTX pulse/campaign correlation
         ├── greynoise.rs  # GreyNoise noise vs. targeted classification
-        └── threatfox.rs  # ThreatFox malware C2 IOC matching (no key)
+        ├── threatfox.rs  # ThreatFox malware C2 IOC matching (no key)
+        ├── bgpview.rs    # BGPView BGP routing, ASN, prefix, PTR (no key)
+        ├── ipqs.rs       # IPQualityScore fraud/proxy/VPN/bot detection
+        ├── pulsedive.rs  # Pulsedive aggregated risk and threat feeds
+        └── ipinfo.rs     # IPinfo hostname, org, timezone, privacy flags
 ```
 
 ## License

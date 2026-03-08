@@ -59,6 +59,10 @@ mod tests {
             otx: None,
             greynoise: None,
             threatfox: None,
+            bgpview: None,
+            ipqs: None,
+            pulsedive: None,
+            ipinfo: None,
         }
     }
 

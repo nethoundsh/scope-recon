@@ -14,10 +14,14 @@ use crate::{
     ApiKeys,
     api::{
         abuseipdb::fetch_abuseipdb,
+        bgpview::fetch_bgpview,
         greynoise::fetch_greynoise,
         internetdb::fetch_internetdb,
         ipapi::fetch_ipapi,
+        ipinfo::fetch_ipinfo,
+        ipqs::fetch_ipqs,
         otx::fetch_otx,
+        pulsedive::fetch_pulsedive,
         retry::with_retry,
         shodan::fetch_shodan,
         threatfox::fetch_threatfox,
@@ -133,6 +137,18 @@ fn apply_cached_report(app: &mut App, report: crate::model::ThreatReport) {
     }
     if let Some(v) = report.threatfox {
         app.threatfox = app::SourceState::Done(v);
+    }
+    if let Some(v) = report.bgpview {
+        app.bgpview = app::SourceState::Done(v);
+    }
+    if let Some(v) = report.ipqs {
+        app.ipqs = app::SourceState::Done(v);
+    }
+    if let Some(v) = report.pulsedive {
+        app.pulsedive = app::SourceState::Done(v);
+    }
+    if let Some(v) = report.ipinfo {
+        app.ipinfo = app::SourceState::Done(v);
     }
 }
 
@@ -270,6 +286,75 @@ async fn spawn_queries(
                 with_retry("ThreatFox", RETRY_DELAY, || fetch_threatfox(&ip)).await
             };
             let _ = tx.send(SourceUpdate::ThreatFox(result)).await;
+        });
+    }
+
+    // bgpview
+    if !skip_if_done!(app.bgpview) {
+        let ip = ip.to_string();
+        let tx = tx.clone();
+        let should = should_run(only, "bgpview");
+        tokio::spawn(async move {
+            let result = if !should {
+                Err(anyhow::anyhow!("__skipped__"))
+            } else {
+                with_retry("BGPView", RETRY_DELAY, || fetch_bgpview(&ip)).await
+            };
+            let _ = tx.send(SourceUpdate::BgpView(result)).await;
+        });
+    }
+
+    // ipqs
+    if !skip_if_done!(app.ipqs) {
+        let ip = ip.to_string();
+        let tx = tx.clone();
+        let should = should_run(only, "ipqs");
+        let key = keys.ipqs.clone();
+        tokio::spawn(async move {
+            let result = if !should {
+                Err(anyhow::anyhow!("__skipped__"))
+            } else {
+                match key.as_deref() {
+                    Some(k) => with_retry("IPQualityScore", RETRY_DELAY, || fetch_ipqs(&ip, k)).await,
+                    None => Err(anyhow::anyhow!("IPQS_API_KEY not set")),
+                }
+            };
+            let _ = tx.send(SourceUpdate::Ipqs(result)).await;
+        });
+    }
+
+    // pulsedive
+    if !skip_if_done!(app.pulsedive) {
+        let ip = ip.to_string();
+        let tx = tx.clone();
+        let should = should_run(only, "pulsedive");
+        let key = keys.pulsedive.clone();
+        tokio::spawn(async move {
+            let result = if !should {
+                Err(anyhow::anyhow!("__skipped__"))
+            } else {
+                match key.as_deref() {
+                    Some(k) => with_retry("Pulsedive", RETRY_DELAY, || fetch_pulsedive(&ip, k)).await,
+                    None => Err(anyhow::anyhow!("PULSEDIVE_API_KEY not set")),
+                }
+            };
+            let _ = tx.send(SourceUpdate::Pulsedive(result)).await;
+        });
+    }
+
+    // ipinfo
+    if !skip_if_done!(app.ipinfo) {
+        let ip = ip.to_string();
+        let tx = tx.clone();
+        let should = should_run(only, "ipinfo");
+        let token = keys.ipinfo.clone();
+        tokio::spawn(async move {
+            let result = if !should {
+                Err(anyhow::anyhow!("__skipped__"))
+            } else {
+                with_retry("IPInfo", RETRY_DELAY, || fetch_ipinfo(&ip, token.as_deref())).await
+            };
+            let _ = tx.send(SourceUpdate::IpInfo(result)).await;
         });
     }
 }

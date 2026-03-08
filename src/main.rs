@@ -17,10 +17,14 @@ mod tui;
 
 use api::{
     abuseipdb::fetch_abuseipdb,
+    bgpview::fetch_bgpview,
     greynoise::fetch_greynoise,
     internetdb::fetch_internetdb,
     ipapi::fetch_ipapi,
+    ipinfo::fetch_ipinfo,
+    ipqs::fetch_ipqs,
     otx::fetch_otx,
+    pulsedive::fetch_pulsedive,
     retry::with_retry,
     shodan::fetch_shodan,
     threatfox::fetch_threatfox,
@@ -40,6 +44,9 @@ struct ApiKeys {
     virustotal: Option<String>,
     otx: Option<String>,
     greynoise: Option<String>,
+    ipqs: Option<String>,
+    pulsedive: Option<String>,
+    ipinfo: Option<String>,
 }
 
 impl ApiKeys {
@@ -50,6 +57,9 @@ impl ApiKeys {
             virustotal: std::env::var("VIRUSTOTAL_API_KEY").ok(),
             otx: std::env::var("OTX_API_KEY").ok(),
             greynoise: std::env::var("GREYNOISE_API_KEY").ok(),
+            ipqs: std::env::var("IPQS_API_KEY").ok(),
+            pulsedive: std::env::var("PULSEDIVE_API_KEY").ok(),
+            ipinfo: std::env::var("IPINFO_TOKEN").ok(),
         }
     }
 }
@@ -139,7 +149,7 @@ async fn main() -> Result<()> {
 async fn query_ip(ip: &str, keys: &ApiKeys, cli: &Cli) -> (ThreatReport, Vec<(String, String)>) {
     let only = &cli.only;
 
-    let (ipapi_res, shodan_res, abuse_res, vt_res, otx_res, gn_res, tf_res) = tokio::join!(
+    let (ipapi_res, shodan_res, abuse_res, vt_res, otx_res, gn_res, tf_res, bgp_res, ipqs_res, pd_res, ii_res) = tokio::join!(
         async {
             if !should_run(only, "ipapi") {
                 return Err(anyhow::anyhow!("__skipped__"));
@@ -202,6 +212,39 @@ async fn query_ip(ip: &str, keys: &ApiKeys, cli: &Cli) -> (ThreatReport, Vec<(St
             }
             with_retry("ThreatFox", RETRY_DELAY, || fetch_threatfox(ip)).await
         },
+        async {
+            if !should_run(only, "bgpview") {
+                return Err(anyhow::anyhow!("__skipped__"));
+            }
+            with_retry("BGPView", RETRY_DELAY, || fetch_bgpview(ip)).await
+        },
+        async {
+            if !should_run(only, "ipqs") {
+                return Err(anyhow::anyhow!("__skipped__"));
+            }
+            match keys.ipqs.as_deref() {
+                Some(k) => with_retry("IPQualityScore", RETRY_DELAY, || fetch_ipqs(ip, k)).await,
+                None => Err(anyhow::anyhow!("IPQS_API_KEY not set")),
+            }
+        },
+        async {
+            if !should_run(only, "pulsedive") {
+                return Err(anyhow::anyhow!("__skipped__"));
+            }
+            match keys.pulsedive.as_deref() {
+                Some(k) => with_retry("Pulsedive", RETRY_DELAY, || fetch_pulsedive(ip, k)).await,
+                None => Err(anyhow::anyhow!("PULSEDIVE_API_KEY not set")),
+            }
+        },
+        async {
+            if !should_run(only, "ipinfo") {
+                return Err(anyhow::anyhow!("__skipped__"));
+            }
+            with_retry("IPInfo", RETRY_DELAY, || {
+                fetch_ipinfo(ip, keys.ipinfo.as_deref())
+            })
+            .await
+        },
     );
 
     let mut errors: Vec<(String, String)> = Vec::new();
@@ -218,6 +261,10 @@ async fn query_ip(ip: &str, keys: &ApiKeys, cli: &Cli) -> (ThreatReport, Vec<(St
         otx: collect("OTX", otx_res, &mut errors),
         greynoise: collect("GreyNoise", gn_res, &mut errors),
         threatfox: collect("ThreatFox", tf_res, &mut errors),
+        bgpview: collect("BGPView", bgp_res, &mut errors),
+        ipqs: collect("IPQualityScore", ipqs_res, &mut errors),
+        pulsedive: collect("Pulsedive", pd_res, &mut errors),
+        ipinfo: collect("IPInfo", ii_res, &mut errors),
     };
 
     (report, errors)

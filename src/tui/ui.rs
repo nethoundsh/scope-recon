@@ -78,6 +78,10 @@ fn render_sources(f: &mut Frame, app: &App, area: Rect) {
                 3 => source_icon(&app.virustotal, spin),
                 4 => source_icon(&app.otx, spin),
                 5 => source_icon(&app.greynoise, spin),
+                7 => source_icon(&app.bgpview, spin),
+                8 => source_icon(&app.ipqs, spin),
+                9 => source_icon(&app.pulsedive, spin),
+                10 => source_icon(&app.ipinfo, spin),
                 6 => source_icon(&app.threatfox, spin),
                 _ => ("?".to_string(), Style::default()),
             };
@@ -125,6 +129,10 @@ fn render_detail(f: &mut Frame, app: &App, area: Rect) {
         4 => ("ALIENVAULT OTX", detail_otx(app)),
         5 => ("GREYNOISE", detail_greynoise(app)),
         6 => ("THREATFOX  (abuse.ch)", detail_threatfox(app)),
+        7 => ("BGPVIEW", detail_bgpview(app)),
+        8 => ("IPQUALITYSCORE", detail_ipqs(app)),
+        9 => ("PULSEDIVE", detail_pulsedive(app)),
+        10 => ("IPINFO  (ipinfo.io)", detail_ipinfo(app)),
         _ => ("", vec![]),
     };
 
@@ -524,6 +532,60 @@ pub fn build_partial_report(app: &App) -> ThreatReport {
         } else {
             None
         },
+        bgpview: if let SourceState::Done(v) = &app.bgpview {
+            Some(crate::model::BGPViewSummary {
+                asn: v.asn,
+                asn_name: v.asn_name.clone(),
+                asn_description: v.asn_description.clone(),
+                country_code: v.country_code.clone(),
+                ptr_record: v.ptr_record.clone(),
+                prefixes: v.prefixes.clone(),
+                rir: v.rir.clone(),
+            })
+        } else {
+            None
+        },
+        ipqs: if let SourceState::Done(v) = &app.ipqs {
+            Some(crate::model::IPQSSummary {
+                fraud_score: v.fraud_score,
+                proxy: v.proxy,
+                vpn: v.vpn,
+                tor: v.tor,
+                bot_status: v.bot_status,
+                recent_abuse: v.recent_abuse,
+                abuse_velocity: v.abuse_velocity.clone(),
+                isp: v.isp.clone(),
+                country_code: v.country_code.clone(),
+            })
+        } else {
+            None
+        },
+        pulsedive: if let SourceState::Done(v) = &app.pulsedive {
+            Some(crate::model::PulsediveSummary {
+                risk: v.risk.clone(),
+                last_seen: v.last_seen.clone(),
+                threats: v.threats.clone(),
+                feeds: v.feeds.clone(),
+            })
+        } else {
+            None
+        },
+        ipinfo: if let SourceState::Done(v) = &app.ipinfo {
+            Some(crate::model::IPInfoSummary {
+                hostname: v.hostname.clone(),
+                city: v.city.clone(),
+                region: v.region.clone(),
+                country: v.country.clone(),
+                org: v.org.clone(),
+                timezone: v.timezone.clone(),
+                is_vpn: v.is_vpn,
+                is_proxy: v.is_proxy,
+                is_tor: v.is_tor,
+                is_hosting: v.is_hosting,
+            })
+        } else {
+            None
+        },
     }
 }
 
@@ -537,4 +599,152 @@ fn join_s(v: &[String]) -> String {
 
 fn bool_s(b: bool) -> String {
     if b { "Yes".to_string() } else { "No".to_string() }
+}
+
+fn opt_bool_s(v: Option<bool>) -> String {
+    match v {
+        Some(true) => "Yes".to_string(),
+        Some(false) => "No".to_string(),
+        None => "-".to_string(),
+    }
+}
+
+fn detail_bgpview(app: &App) -> Vec<Line<'static>> {
+    match &app.bgpview {
+        SourceState::Loading => loading(),
+        SourceState::Skipped => skipped(),
+        SourceState::Error(e) => vec![Line::from(Span::styled(
+            format!("  Error: {}", e),
+            Style::default().fg(Color::Red),
+        ))],
+        SourceState::Done(b) => {
+            let asn_str = match (b.asn, &b.asn_name) {
+                (Some(n), Some(name)) => format!("AS{} {}", n, name),
+                (Some(n), None) => format!("AS{}", n),
+                _ => "-".to_string(),
+            };
+            vec![
+                Line::raw(""),
+                label("ASN:", asn_str),
+                label("Description:", opt_s(&b.asn_description)),
+                label("Country:", opt_s(&b.country_code)),
+                label("PTR Record:", opt_s(&b.ptr_record)),
+                label("Prefixes:", join_s(&b.prefixes)),
+                label("RIR:", opt_s(&b.rir)),
+            ]
+        }
+    }
+}
+
+fn detail_ipqs(app: &App) -> Vec<Line<'static>> {
+    match &app.ipqs {
+        SourceState::Loading => loading(),
+        SourceState::Skipped => skipped(),
+        SourceState::Error(e) => vec![Line::from(Span::styled(
+            format!("  Error: {}", e),
+            Style::default().fg(Color::Red),
+        ))],
+        SourceState::Done(q) => {
+            let score_color = if q.fraud_score >= 75 {
+                Color::Red
+            } else if q.fraud_score >= 30 {
+                Color::Yellow
+            } else {
+                Color::Green
+            };
+            let level = if q.fraud_score >= 75 { "[HIGH]" } else if q.fraud_score >= 30 { "[MEDIUM]" } else { "[LOW]" };
+            vec![
+                Line::raw(""),
+                Line::from(vec![
+                    Span::styled("  Fraud Score:     ", dim()),
+                    Span::styled(format!("{}/100", q.fraud_score), Style::default().fg(score_color)),
+                    Span::raw("  "),
+                    Span::styled(level, Style::default().fg(score_color).add_modifier(Modifier::BOLD)),
+                ]),
+                label("Proxy:", bool_s(q.proxy)),
+                label("VPN:", bool_s(q.vpn)),
+                label("TOR:", bool_s(q.tor)),
+                label("Bot:", bool_s(q.bot_status)),
+                label("Recent Abuse:", bool_s(q.recent_abuse)),
+                label("Abuse Velocity:", q.abuse_velocity.clone()),
+                label("ISP:", opt_s(&q.isp)),
+                label("Country:", opt_s(&q.country_code)),
+            ]
+        }
+    }
+}
+
+fn detail_pulsedive(app: &App) -> Vec<Line<'static>> {
+    match &app.pulsedive {
+        SourceState::Loading => loading(),
+        SourceState::Skipped => skipped(),
+        SourceState::Error(e) => vec![Line::from(Span::styled(
+            format!("  Error: {}", e),
+            Style::default().fg(Color::Red),
+        ))],
+        SourceState::Done(p) => {
+            let risk_color = match p.risk.as_str() {
+                "none" => Color::Green,
+                "low" | "medium" => Color::Yellow,
+                "high" | "critical" => Color::Red,
+                _ => Color::DarkGray,
+            };
+            let mut lines = vec![
+                Line::raw(""),
+                Line::from(vec![
+                    Span::styled("  Risk:            ", dim()),
+                    Span::styled(p.risk.clone(), Style::default().fg(risk_color).add_modifier(Modifier::BOLD)),
+                ]),
+                label("Last Seen:", opt_s(&p.last_seen)),
+            ];
+            if !p.threats.is_empty() {
+                lines.push(Line::from(Span::styled("  Threats:", dim())));
+                for t in &p.threats {
+                    lines.push(Line::from(Span::raw(format!("    - {}", t))));
+                }
+            }
+            if !p.feeds.is_empty() {
+                lines.push(Line::from(Span::styled("  Feeds:", dim())));
+                for f in p.feeds.iter().take(5) {
+                    lines.push(Line::from(Span::raw(format!("    - {}", f))));
+                }
+                if p.feeds.len() > 5 {
+                    lines.push(Line::from(Span::styled(
+                        format!("    + {} more...", p.feeds.len() - 5),
+                        dim(),
+                    )));
+                }
+            }
+            lines
+        }
+    }
+}
+
+fn detail_ipinfo(app: &App) -> Vec<Line<'static>> {
+    match &app.ipinfo {
+        SourceState::Loading => loading(),
+        SourceState::Skipped => skipped(),
+        SourceState::Error(e) => vec![Line::from(Span::styled(
+            format!("  Error: {}", e),
+            Style::default().fg(Color::Red),
+        ))],
+        SourceState::Done(i) => {
+            let mut lines = vec![
+                Line::raw(""),
+                label("Hostname:", opt_s(&i.hostname)),
+                label("City:", opt_s(&i.city)),
+                label("Region:", opt_s(&i.region)),
+                label("Country:", opt_s(&i.country)),
+                label("Org:", opt_s(&i.org)),
+                label("Timezone:", opt_s(&i.timezone)),
+            ];
+            if i.is_vpn.is_some() || i.is_proxy.is_some() || i.is_tor.is_some() || i.is_hosting.is_some() {
+                lines.push(label("VPN:", opt_bool_s(i.is_vpn)));
+                lines.push(label("Proxy:", opt_bool_s(i.is_proxy)));
+                lines.push(label("TOR:", opt_bool_s(i.is_tor)));
+                lines.push(label("Hosting:", opt_bool_s(i.is_hosting)));
+            }
+            lines
+        }
+    }
 }

@@ -1,8 +1,12 @@
 pub mod abuseipdb;
+pub mod bgpview;
 pub mod greynoise;
 pub mod internetdb;
 pub mod ipapi;
+pub mod ipinfo;
+pub mod ipqs;
 pub mod otx;
+pub mod pulsedive;
 pub mod retry;
 pub mod shodan;
 pub mod threatfox;

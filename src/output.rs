@@ -195,6 +195,105 @@ pub fn pretty_print(
         }
     }
 
+    // --- BGPVIEW ---
+    ln(w, String::new());
+    ln(w, format!("{}", "BGPVIEW".bold().underline()));
+    match &report.bgpview {
+        None => ln(w, format!("  {}", "[source unavailable]".dimmed())),
+        Some(b) => {
+            let asn_str = match (b.asn, &b.asn_name) {
+                (Some(n), Some(name)) => format!("AS{} {}", n, name),
+                (Some(n), None) => format!("AS{}", n),
+                _ => "-".to_string(),
+            };
+            ln(w, format!("  {:16} {}", "ASN:".dimmed(), asn_str));
+            ln(w, format!("  {:16} {}", "Description:".dimmed(), opt_str(&b.asn_description)));
+            ln(w, format!("  {:16} {}", "Country:".dimmed(), opt_str(&b.country_code)));
+            ln(w, format!("  {:16} {}", "PTR Record:".dimmed(), opt_str(&b.ptr_record)));
+            ln(w, format!("  {:16} {}", "Prefixes:".dimmed(), join_str(&b.prefixes)));
+            ln(w, format!("  {:16} {}", "RIR:".dimmed(), opt_str(&b.rir)));
+        }
+    }
+
+    // --- IPQUALITYSCORE ---
+    ln(w, String::new());
+    ln(w, format!("{}", "IPQUALITYSCORE".bold().underline()));
+    match &report.ipqs {
+        None => ln(w, format!("  {}", "[source unavailable]".dimmed())),
+        Some(q) => {
+            let score_str = format!("{}/100", q.fraud_score);
+            let label = if q.fraud_score >= 75 {
+                format!("{}  {}", score_str.red(), "[HIGH]".red().bold())
+            } else if q.fraud_score >= 30 {
+                format!("{}  {}", score_str.yellow(), "[MEDIUM]".yellow().bold())
+            } else {
+                format!("{}  {}", score_str.green(), "[LOW]".green().bold())
+            };
+            ln(w, format!("  {:16} {}", "Fraud Score:".dimmed(), label));
+            ln(w, format!("  {:16} {}", "Proxy:".dimmed(), bool_str(q.proxy)));
+            ln(w, format!("  {:16} {}", "VPN:".dimmed(), bool_str(q.vpn)));
+            ln(w, format!("  {:16} {}", "TOR:".dimmed(), bool_str(q.tor)));
+            ln(w, format!("  {:16} {}", "Bot:".dimmed(), bool_str(q.bot_status)));
+            ln(w, format!("  {:16} {}", "Recent Abuse:".dimmed(), bool_str(q.recent_abuse)));
+            ln(w, format!("  {:16} {}", "Abuse Velocity:".dimmed(), &q.abuse_velocity));
+            ln(w, format!("  {:16} {}", "ISP:".dimmed(), opt_str(&q.isp)));
+            ln(w, format!("  {:16} {}", "Country:".dimmed(), opt_str(&q.country_code)));
+        }
+    }
+
+    // --- PULSEDIVE ---
+    ln(w, String::new());
+    ln(w, format!("{}", "PULSEDIVE".bold().underline()));
+    match &report.pulsedive {
+        None => ln(w, format!("  {}", "[source unavailable]".dimmed())),
+        Some(p) => {
+            let risk_colored = match p.risk.as_str() {
+                "none" => p.risk.green().bold().to_string(),
+                "low" | "medium" => p.risk.yellow().bold().to_string(),
+                "high" | "critical" => p.risk.red().bold().to_string(),
+                _ => p.risk.dimmed().to_string(),
+            };
+            ln(w, format!("  {:16} {}", "Risk:".dimmed(), risk_colored));
+            ln(w, format!("  {:16} {}", "Last Seen:".dimmed(), opt_str(&p.last_seen)));
+            if !p.threats.is_empty() {
+                ln(w, format!("  {:16}", "Threats:".dimmed()));
+                for t in &p.threats {
+                    ln(w, format!("                 - {}", t));
+                }
+            }
+            if !p.feeds.is_empty() {
+                ln(w, format!("  {:16}", "Feeds:".dimmed()));
+                for f in p.feeds.iter().take(5) {
+                    ln(w, format!("                 - {}", f));
+                }
+                if p.feeds.len() > 5 {
+                    ln(w, format!("                 {}", format!("+ {} more...", p.feeds.len() - 5).dimmed()));
+                }
+            }
+        }
+    }
+
+    // --- IPINFO ---
+    ln(w, String::new());
+    ln(w, format!("{}", "IPINFO  (ipinfo.io)".bold().underline()));
+    match &report.ipinfo {
+        None => ln(w, format!("  {}", "[source unavailable]".dimmed())),
+        Some(i) => {
+            ln(w, format!("  {:16} {}", "Hostname:".dimmed(), opt_str(&i.hostname)));
+            ln(w, format!("  {:16} {}", "City:".dimmed(), opt_str(&i.city)));
+            ln(w, format!("  {:16} {}", "Region:".dimmed(), opt_str(&i.region)));
+            ln(w, format!("  {:16} {}", "Country:".dimmed(), opt_str(&i.country)));
+            ln(w, format!("  {:16} {}", "Org:".dimmed(), opt_str(&i.org)));
+            ln(w, format!("  {:16} {}", "Timezone:".dimmed(), opt_str(&i.timezone)));
+            if i.is_vpn.is_some() || i.is_proxy.is_some() || i.is_tor.is_some() || i.is_hosting.is_some() {
+                ln(w, format!("  {:16} {}", "VPN:".dimmed(), opt_bool_str(i.is_vpn)));
+                ln(w, format!("  {:16} {}", "Proxy:".dimmed(), opt_bool_str(i.is_proxy)));
+                ln(w, format!("  {:16} {}", "TOR:".dimmed(), opt_bool_str(i.is_tor)));
+                ln(w, format!("  {:16} {}", "Hosting:".dimmed(), opt_bool_str(i.is_hosting)));
+            }
+        }
+    }
+
     // --- ERRORS (verbose only) ---
     if verbose && !errors.is_empty() {
         ln(w, String::new());
@@ -268,6 +367,27 @@ pub fn compute_verdict(report: &ThreatReport) -> (&'static str, Vec<String>) {
             findings.push(format!("{} OTX pulse(s)", o.pulse_count));
         }
     }
+    if let Some(q) = &report.ipqs {
+        if q.fraud_score >= 75 && severity < 2 {
+            severity = 2;
+            findings.push(format!("IPQS fraud score {}/100", q.fraud_score));
+        } else if q.fraud_score >= 30 && severity < 1 {
+            severity = 1;
+            findings.push(format!("IPQS fraud score {}/100", q.fraud_score));
+        }
+        if q.tor   { findings.push("IPQS: TOR exit node".to_string()); }
+        if q.proxy { findings.push("IPQS: proxy".to_string()); }
+        if q.vpn   { findings.push("IPQS: VPN".to_string()); }
+    }
+    if let Some(p) = &report.pulsedive {
+        if (p.risk == "critical" || p.risk == "high") && severity < 2 {
+            severity = 2;
+            findings.push(format!("Pulsedive risk: {}", p.risk));
+        } else if p.risk == "medium" && severity < 1 {
+            severity = 1;
+            findings.push(format!("Pulsedive risk: {}", p.risk));
+        }
+    }
     if severity == 0 {
         if let Some(a) = &report.abuseipdb {
             if a.is_whitelisted {
@@ -308,4 +428,12 @@ fn join_str(v: &[String]) -> String {
 
 fn bool_str(b: bool) -> &'static str {
     if b { "Yes" } else { "No" }
+}
+
+fn opt_bool_str(v: Option<bool>) -> &'static str {
+    match v {
+        Some(true) => "Yes",
+        Some(false) => "No",
+        None => "-",
+    }
 }

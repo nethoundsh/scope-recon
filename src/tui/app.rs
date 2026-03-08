@@ -1,7 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use crate::model::{
-    AbuseIPDBSummary, GreyNoiseSummary, IPAPISummary, OTXSummary, ShodanSummary,
-    ThreatFoxSummary, VirusTotalSummary,
+    AbuseIPDBSummary, BGPViewSummary, GreyNoiseSummary, IPAPISummary, IPInfoSummary,
+    IPQSSummary, OTXSummary, PulsediveSummary, ShodanSummary, ThreatFoxSummary, VirusTotalSummary,
 };
 
 pub enum SourceState<T> {
@@ -19,6 +19,10 @@ pub enum SourceUpdate {
     Otx(anyhow::Result<OTXSummary>),
     GreyNoise(anyhow::Result<GreyNoiseSummary>),
     ThreatFox(anyhow::Result<ThreatFoxSummary>),
+    BgpView(anyhow::Result<BGPViewSummary>),
+    Ipqs(anyhow::Result<IPQSSummary>),
+    Pulsedive(anyhow::Result<PulsediveSummary>),
+    IpInfo(anyhow::Result<IPInfoSummary>),
 }
 
 pub const SOURCE_NAMES: &[&str] = &[
@@ -29,6 +33,10 @@ pub const SOURCE_NAMES: &[&str] = &[
     "OTX",
     "GreyNoise",
     "ThreatFox",
+    "BGPView",
+    "IPQS",
+    "Pulsedive",
+    "IPInfo",
 ];
 
 pub struct App {
@@ -45,6 +53,10 @@ pub struct App {
     pub otx: SourceState<OTXSummary>,
     pub greynoise: SourceState<GreyNoiseSummary>,
     pub threatfox: SourceState<ThreatFoxSummary>,
+    pub bgpview:   SourceState<BGPViewSummary>,
+    pub ipqs:      SourceState<IPQSSummary>,
+    pub pulsedive: SourceState<PulsediveSummary>,
+    pub ipinfo:    SourceState<IPInfoSummary>,
 }
 
 impl App {
@@ -63,6 +75,10 @@ impl App {
             otx: SourceState::Loading,
             greynoise: SourceState::Loading,
             threatfox: SourceState::Loading,
+            bgpview:   SourceState::Loading,
+            ipqs:      SourceState::Loading,
+            pulsedive: SourceState::Loading,
+            ipinfo:    SourceState::Loading,
         }
     }
 
@@ -74,6 +90,10 @@ impl App {
         self.otx = SourceState::Loading;
         self.greynoise = SourceState::Loading;
         self.threatfox = SourceState::Loading;
+        self.bgpview   = SourceState::Loading;
+        self.ipqs      = SourceState::Loading;
+        self.pulsedive = SourceState::Loading;
+        self.ipinfo    = SourceState::Loading;
         self.detail_scroll = 0;
         self.refresh_requested = false;
     }
@@ -193,6 +213,38 @@ impl App {
                         } else {
                             SourceState::Error(e.to_string())
                         }
+                    }
+                };
+            }
+            SourceUpdate::BgpView(r) => {
+                self.bgpview = match r {
+                    Ok(v) => SourceState::Done(v),
+                    Err(e) => {
+                        if e.to_string() == "__skipped__" { SourceState::Skipped } else { SourceState::Error(e.to_string()) }
+                    }
+                };
+            }
+            SourceUpdate::Ipqs(r) => {
+                self.ipqs = match r {
+                    Ok(v) => SourceState::Done(v),
+                    Err(e) => {
+                        if e.to_string() == "__skipped__" { SourceState::Skipped } else { SourceState::Error(e.to_string()) }
+                    }
+                };
+            }
+            SourceUpdate::Pulsedive(r) => {
+                self.pulsedive = match r {
+                    Ok(v) => SourceState::Done(v),
+                    Err(e) => {
+                        if e.to_string() == "__skipped__" { SourceState::Skipped } else { SourceState::Error(e.to_string()) }
+                    }
+                };
+            }
+            SourceUpdate::IpInfo(r) => {
+                self.ipinfo = match r {
+                    Ok(v) => SourceState::Done(v),
+                    Err(e) => {
+                        if e.to_string() == "__skipped__" { SourceState::Skipped } else { SourceState::Error(e.to_string()) }
                     }
                 };
             }

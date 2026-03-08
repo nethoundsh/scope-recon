@@ -11,6 +11,10 @@ pub struct ThreatReport {
     pub otx: Option<OTXSummary>,
     pub greynoise: Option<GreyNoiseSummary>,
     pub threatfox: Option<ThreatFoxSummary>,
+    pub bgpview:   Option<BGPViewSummary>,
+    pub ipqs:      Option<IPQSSummary>,
+    pub pulsedive: Option<PulsediveSummary>,
+    pub ipinfo:    Option<IPInfoSummary>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -84,6 +88,52 @@ pub struct GreyNoiseSummary {
 pub struct ThreatFoxSummary {
     pub ioc_count: usize,
     pub iocs: Vec<ThreatFoxIOC>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BGPViewSummary {
+    pub asn: Option<u32>,
+    pub asn_name: Option<String>,
+    pub asn_description: Option<String>,
+    pub country_code: Option<String>,
+    pub ptr_record: Option<String>,
+    pub prefixes: Vec<String>,
+    pub rir: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct IPQSSummary {
+    pub fraud_score: u32,
+    pub proxy: bool,
+    pub vpn: bool,
+    pub tor: bool,
+    pub bot_status: bool,
+    pub recent_abuse: bool,
+    pub abuse_velocity: String,
+    pub isp: Option<String>,
+    pub country_code: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PulsediveSummary {
+    pub risk: String,
+    pub last_seen: Option<String>,
+    pub threats: Vec<String>,
+    pub feeds: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct IPInfoSummary {
+    pub hostname: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub country: Option<String>,
+    pub org: Option<String>,
+    pub timezone: Option<String>,
+    pub is_vpn: Option<bool>,
+    pub is_proxy: Option<bool>,
+    pub is_tor: Option<bool>,
+    pub is_hosting: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
