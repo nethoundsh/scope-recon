@@ -122,6 +122,8 @@ fn source_icon<T>(state: &SourceState<T>, spinner: &str) -> (String, Style) {
 }
 
 fn render_detail(f: &mut Frame, app: &App, area: Rect) {
+    // Inner width: subtract 2 for borders and 2 for the "  " indent in AI lines.
+    let wrap_width = area.width.saturating_sub(4) as usize;
     let (title, lines) = match app.selected {
         0 => ("GEOLOCATION  (ip-api.com)", detail_ipapi(app)),
         1 => ("SHODAN", detail_shodan(app)),
@@ -134,7 +136,7 @@ fn render_detail(f: &mut Frame, app: &App, area: Rect) {
         8 => ("IPQUALITYSCORE", detail_ipqs(app)),
         9 => ("PULSEDIVE", detail_pulsedive(app)),
         10 => ("IPINFO  (ipinfo.io)", detail_ipinfo(app)),
-        11 => ("AI ANALYSIS  (Grok via OpenRouter)", detail_ai_analysis(app)),
+        11 => ("AI ANALYSIS  (Grok via OpenRouter)", detail_ai_analysis(app, wrap_width)),
         _ => ("", vec![]),
     };
 
@@ -438,7 +440,7 @@ fn detail_threatfox(app: &App) -> Vec<Line<'static>> {
     }
 }
 
-fn detail_ai_analysis(app: &App) -> Vec<Line<'static>> {
+fn detail_ai_analysis(app: &App, wrap_width: usize) -> Vec<Line<'static>> {
     match &app.ai_analysis {
         SourceState::Loading => loading(),
         SourceState::Skipped => skipped(),
@@ -448,16 +450,46 @@ fn detail_ai_analysis(app: &App) -> Vec<Line<'static>> {
         ))],
         SourceState::Done(v) => {
             let mut lines = vec![Line::raw("")];
-            for line in v.analysis.lines() {
-                if line.is_empty() {
+            for para in v.analysis.lines() {
+                if para.is_empty() {
                     lines.push(Line::raw(""));
                 } else {
-                    lines.push(Line::raw(format!("  {}", line)));
+                    for wrapped in wrap_words(para, wrap_width) {
+                        lines.push(Line::raw(format!("  {}", wrapped)));
+                    }
                 }
             }
             lines
         }
     }
+}
+
+/// Word-wrap `text` to `width` characters. Words longer than `width` are placed
+/// on their own line without splitting. Returns at least one element.
+fn wrap_words(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        if current.is_empty() {
+            current.push_str(word);
+        } else if current.len() + 1 + word.len() <= width {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(current.clone());
+            current = word.to_string();
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
 }
 
 /// Build a partial ThreatReport from current app state for verdict computation.
