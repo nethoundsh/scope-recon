@@ -34,6 +34,10 @@ pub async fn fetch_threatfox(ip: &str, key: &str) -> Result<ThreatFoxSummary> {
         .await
         .context("ThreatFox request failed")?;
 
+    if resp.status() == 403 {
+        anyhow::bail!("ThreatFox: invalid Auth-Key — check THREATFOX_API_KEY");
+    }
+
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
@@ -45,7 +49,7 @@ pub async fn fetch_threatfox(ip: &str, key: &str) -> Result<ThreatFoxSummary> {
     match parsed.query_status.as_str() {
         "ok" => {}
         "no_results" => return Ok(ThreatFoxSummary { ioc_count: 0, iocs: vec![] }),
-        "unknown_auth_key" => anyhow::bail!("ThreatFox: invalid Auth-Key"),
+        "unknown_auth_key" => anyhow::bail!("ThreatFox: invalid Auth-Key — check THREATFOX_API_KEY"),
         other => anyhow::bail!("ThreatFox query_status: {}", other),
     }
 
