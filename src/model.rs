@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ThreatReport {
     pub queried_at: String,
     pub ip: String,
@@ -15,9 +15,15 @@ pub struct ThreatReport {
     pub ipqs:      Option<IPQSSummary>,
     pub pulsedive: Option<PulsediveSummary>,
     pub ipinfo:    Option<IPInfoSummary>,
+    pub ai_analysis: Option<AiAnalysisSummary>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AiAnalysisSummary {
+    pub analysis: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct IPAPISummary {
     pub country: Option<String>,
     pub region: Option<String>,
@@ -27,7 +33,7 @@ pub struct IPAPISummary {
     pub asn: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ServiceInfo {
     pub port: u16,
     pub transport: Option<String>,
@@ -35,7 +41,7 @@ pub struct ServiceInfo {
     pub version: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ShodanSummary {
     pub org: Option<String>,
     pub isp: Option<String>,
@@ -47,7 +53,7 @@ pub struct ShodanSummary {
     pub vulns: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct AbuseIPDBSummary {
     pub abuse_confidence: u8,
     pub total_reports: u32,
@@ -60,7 +66,7 @@ pub struct AbuseIPDBSummary {
     pub is_whitelisted: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct VirusTotalSummary {
     pub malicious: u32,
     pub suspicious: u32,
@@ -69,13 +75,13 @@ pub struct VirusTotalSummary {
     pub last_analysis_date: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct OTXSummary {
     pub pulse_count: u32,
     pub pulse_names: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct GreyNoiseSummary {
     pub noise: bool,
     pub riot: bool,
@@ -84,13 +90,13 @@ pub struct GreyNoiseSummary {
     pub last_seen: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ThreatFoxSummary {
     pub ioc_count: usize,
     pub iocs: Vec<ThreatFoxIOC>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BGPViewSummary {
     pub asn: Option<u32>,
     pub asn_name: Option<String>,
@@ -101,7 +107,7 @@ pub struct BGPViewSummary {
     pub rir: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct IPQSSummary {
     pub fraud_score: u32,
     pub proxy: bool,
@@ -114,7 +120,7 @@ pub struct IPQSSummary {
     pub country_code: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PulsediveSummary {
     pub risk: String,
     pub last_seen: Option<String>,
@@ -122,7 +128,7 @@ pub struct PulsediveSummary {
     pub feeds: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct IPInfoSummary {
     pub hostname: Option<String>,
     pub city: Option<String>,
@@ -136,7 +142,7 @@ pub struct IPInfoSummary {
     pub is_hosting: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ThreatFoxIOC {
     pub ioc: String,
     pub threat_type: String,

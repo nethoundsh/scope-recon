@@ -294,6 +294,19 @@ pub fn pretty_print(
         }
     }
 
+    // --- AI ANALYSIS ---
+    ln(w, String::new());
+    ln(w, format!("{}", "AI ANALYSIS  (Grok via OpenRouter)".bold().underline()));
+    match &report.ai_analysis {
+        None => ln(w, format!("  {}", "[source unavailable]".dimmed())),
+        Some(a) => {
+            ln(w, String::new());
+            for line in a.analysis.lines() {
+                ln(w, format!("  {}", line));
+            }
+        }
+    }
+
     // --- ERRORS (verbose only) ---
     if verbose && !errors.is_empty() {
         ln(w, String::new());

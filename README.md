@@ -1,12 +1,14 @@
 # scope-recon
 
-A fast Rust CLI tool that queries multiple threat intelligence sources concurrently for a given IP address. Single-IP lookups open a live **ratatui TUI** where results populate in real time as each API call completes. Bulk and JSON modes output to the terminal or a file unchanged.
+A fast Rust CLI tool that queries multiple threat intelligence sources for a given IP address. Single-IP lookups open a live **ratatui TUI** where results populate in real time as each API call completes. After all sources finish, an **AI Analysis** panel streams a Grok-powered threat narrative directly into the TUI. Bulk and JSON modes output to the terminal or a file unchanged.
 
 ## Features
 
 - **Live TUI** for single-IP lookups — sources populate with animated spinners as concurrent API calls finish; verdict updates in real time
-- Eleven concurrent API lookups with no sequential waiting
+- Eleven concurrent API lookups, then a **streaming AI analysis** (Grok via OpenRouter) fires automatically once all sources are terminal
+- AI Analysis streams chunk-by-chunk into the detail pane — no waiting for the full response before text appears
 - Synthesized **SUMMARY** verdict (CLEAN / SUSPICIOUS / MALICIOUS) recomputed live in the TUI header as each source arrives
+- AI Analysis is informational only — it does not contribute to the verdict
 - Graceful degradation — missing keys or failed sources show `[source unavailable]` / `✗`, the rest still display
 - `--verbose` flag reveals exactly why each source failed (CLI/JSON mode)
 - `--only` flag to query a subset of sources; skipped sources show `-` in the TUI
@@ -14,7 +16,7 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 - `--output` to write results directly to a file
 - Bulk mode via `--file ips.txt` — processes a list of IPs/CIDRs with rate-limit courtesy delays
 - CIDR range support — `scope-recon 10.0.0.0/28` expands and queries each host (max 256)
-- On-disk caching under `~/.cache/scope-recon/` with configurable TTL; `r` in the TUI bypasses cache and re-queries all sources
+- On-disk caching under `~/.cache/scope-recon/` with configurable TTL; `r` in the TUI bypasses cache and re-queries all sources including AI
 - Shodan InternetDB fallback when no Shodan API key is set (free, no key required)
 - `queried_at` timestamp on every report for audit trails and cache freshness checks
 - `--json` flag for machine-readable output; bulk JSON output is a JSON array
@@ -23,19 +25,22 @@ A fast Rust CLI tool that queries multiple threat intelligence sources concurren
 
 ## API Sources
 
-| Phase | Source | Purpose | Key Required |
-|---|---|---|---|
-| 1 | [ip-api.com](http://ip-api.com) | Geolocation, ASN, ISP | No |
-| 1 | [Shodan](https://shodan.io) | Open ports, service banners, CVEs | No (InternetDB fallback) / Yes (full) |
-| 2 | [VirusTotal](https://virustotal.com) | Vendor reputation consensus | Yes |
-| 2 | [AlienVault OTX](https://otx.alienvault.com) | Threat campaigns, pulse correlation | Yes |
-| 2 | [AbuseIPDB](https://www.abuseipdb.com) | Abuse confidence score, report history | Yes |
-| 3 | [GreyNoise](https://greynoise.io) | Internet noise vs. targeted activity | Optional |
-| 3 | [ThreatFox](https://threatfox.abuse.ch) | Malware C2 IOC matching | Yes (free) |
-| 4 | [RIPE Stat](https://stat.ripe.net) | BGP routing, ASN, prefix | No |
-| 4 | [IPQualityScore](https://ipqualityscore.com) | Fraud score, VPN/proxy/TOR/bot detection | Yes |
-| 4 | [Pulsedive](https://pulsedive.com) | Aggregated risk level, threat feed names | Yes |
-| 4 | [IPinfo](https://ipinfo.io) | Hostname, org, timezone; privacy flags (paid) | Optional |
+All eleven intelligence sources run concurrently. AI Analysis fires sequentially after all eleven are complete.
+
+| Source | Purpose | Key Required |
+|---|---|---|
+| [ip-api.com](http://ip-api.com) | Geolocation, ASN, ISP | No |
+| [Shodan](https://shodan.io) | Open ports, service banners, CVEs | No (InternetDB fallback) / Yes (full) |
+| [VirusTotal](https://virustotal.com) | Vendor reputation consensus | Yes |
+| [AlienVault OTX](https://otx.alienvault.com) | Threat campaigns, pulse correlation | Yes |
+| [AbuseIPDB](https://www.abuseipdb.com) | Abuse confidence score, report history | Yes |
+| [GreyNoise](https://greynoise.io) | Internet noise vs. targeted activity | Optional |
+| [ThreatFox](https://threatfox.abuse.ch) | Malware C2 IOC matching | Yes (free) |
+| [RIPE Stat](https://stat.ripe.net) | BGP routing, ASN, prefix | No |
+| [IPQualityScore](https://ipqualityscore.com) | Fraud score, VPN/proxy/TOR/bot detection | Yes |
+| [Pulsedive](https://pulsedive.com) | Aggregated risk level, threat feed names | Yes |
+| [IPinfo](https://ipinfo.io) | Hostname, org, timezone; privacy flags (paid) | Optional |
+| [OpenRouter / Grok](https://openrouter.ai) | AI threat narrative, malware family context | Yes |
 
 ## TUI Interface
 
@@ -48,7 +53,7 @@ Running `scope-recon <IP>` without `--json`, `--output`, or `--file` opens a ful
 │ SOURCES          │ GEOLOCATION  (ip-api.com)                       │
 │                  │                                                  │
 │ ▶ Geolocation ✓  │   Country:    United States                      │
-│   Shodan      ⠸  │   Region:     Virginia                           │
+│   Shodan      ✓  │   Region:     Virginia                           │
 │   AbuseIPDB   ✓  │   City:       Ashburn                            │
 │   VirusTotal  ✓  │   ISP:        Google LLC                         │
 │   OTX         ✗  │   Org:        Google Public DNS                  │
@@ -58,10 +63,13 @@ Running `scope-recon <IP>` without `--json`, `--output`, or `--file` opens a ful
 │   IPQS        ✗  │                                                  │
 │   Pulsedive   ✗  │                                                  │
 │   IPInfo      ✓  │                                                  │
+│   AI Analysis ⠸  │                                                  │
 ├──────────────────┴─────────────────────────────────────────────────┤
 │  q quit   ↑↓/jk navigate   PgUp/PgDn scroll detail   r refresh    │
 └────────────────────────────────────────────────────────────────────┘
 ```
+
+AI Analysis shows a spinner while the other eleven sources are still loading, then continues spinning while Grok streams its response. Text appears in the detail pane chunk by chunk as it arrives.
 
 **Status icons**
 
@@ -120,8 +128,9 @@ Register for free accounts at each service:
 | IPQualityScore | https://www.ipqualityscore.com/create-account |
 | Pulsedive | https://pulsedive.com/register |
 | IPinfo | https://ipinfo.io/signup |
+| OpenRouter | https://openrouter.ai (model: x-ai/grok-3-beta) |
 
-ip-api.com and RIPE Stat require no account or key. Shodan falls back to InternetDB (ports, hostnames, tags, vulns — no service banners) if `SHODAN_API_KEY` is not set. IPinfo works without a token (1,000 req/day shared limit); set `IPINFO_TOKEN` for 50,000 req/month. IPQualityScore and Pulsedive have free tiers (1,000 req/month and 250 req/day respectively).
+ip-api.com and RIPE Stat require no account or key. Shodan falls back to InternetDB (ports, hostnames, tags, vulns — no service banners) if `SHODAN_API_KEY` is not set. IPinfo works without a token (1,000 req/day shared limit); set `IPINFO_TOKEN` for 50,000 req/month. IPQualityScore and Pulsedive have free tiers (1,000 req/month and 250 req/day respectively). If `OPENROUTER_API_KEY` is not set, AI Analysis shows `✗` and is skipped — all other sources are unaffected.
 
 ### Setting your API keys securely
 
@@ -141,6 +150,7 @@ export THREATFOX_API_KEY=your_threatfox_key_here
 export IPQS_API_KEY=your_ipqualityscore_key_here
 export PULSEDIVE_API_KEY=your_pulsedive_key_here
 export IPINFO_TOKEN=your_ipinfo_token_here         # optional
+export OPENROUTER_API_KEY=your_openrouter_key_here # optional; enables AI Analysis
 ```
 
 Then lock down the file so only your user can read it:
@@ -204,7 +214,7 @@ Options:
 scope-recon 8.8.8.8
 ```
 
-Opens the TUI (see [TUI Interface](#tui-interface) above). Sources populate live with animated spinners; navigate with `↑↓` or `jk` to inspect each source's detail pane. Press `q` to quit, `r` to refresh.
+Opens the TUI (see [TUI Interface](#tui-interface) above). Sources populate live with animated spinners; navigate with `↑↓` or `jk` to inspect each source's detail pane. Once all eleven sources are complete, AI Analysis fires automatically and streams its response. Press `q` to quit, `r` to refresh.
 
 ### Bulk mode
 
@@ -237,9 +247,10 @@ Expands to host IPs and queries each one sequentially. Maximum 256 hosts per ran
 ```bash
 scope-recon 8.8.8.8 --only shodan,virustotal
 scope-recon 8.8.8.8 --only threatfox,greynoise
+scope-recon 8.8.8.8 --only openrouter   # AI fires with whatever data is available
 ```
 
-Sources not in the list are silently skipped — they do not appear as errors in `--verbose` output.
+Sources not in the list are silently skipped — they do not appear as errors in `--verbose` output. When `openrouter` is not in the `--only` list, AI Analysis shows `-` (skipped).
 
 ### Verbose error reporting
 
@@ -254,6 +265,7 @@ SOURCE ERRORS
   AbuseIPDB:       ABUSEIPDB_API_KEY not set
   VirusTotal:      VirusTotal rate limited after retry
   OTX:             OTX_API_KEY not set
+  AI Analysis:     OPENROUTER_API_KEY not set
 ```
 
 ### Disable colors
@@ -273,7 +285,7 @@ scope-recon 8.8.8.8 --output report.txt   # pretty output, no color
 
 ### Caching
 
-Results are cached to `~/.cache/scope-recon/{ip}.json` for 1 hour by default. On a cache hit, the tool skips all API calls and returns the stored report instantly.
+Results are cached to `~/.cache/scope-recon/{ip}.json` for 1 hour by default. On a cache hit, the tool skips all API calls and returns the stored report instantly — including the AI Analysis if it was cached.
 
 ```bash
 # Use cached data for up to 24 hours
@@ -298,6 +310,8 @@ warning: VirusTotal rate limited (429) — retrying in 2s...
 ```
 
 ### SUMMARY verdict logic
+
+The verdict is computed from the eleven intelligence sources only. AI Analysis is informational and does not affect it.
 
 | Verdict | Triggers |
 |---|---|
@@ -409,11 +423,14 @@ scope-recon 8.8.8.8 --json
     "is_proxy": null,
     "is_tor": null,
     "is_hosting": null
+  },
+  "ai_analysis": {
+    "analysis": "8.8.8.8 is Google's primary public DNS resolver..."
   }
 }
 ```
 
-Unavailable sources appear as `null`. Bulk output (`--file`) is a JSON array.
+Unavailable sources (including AI Analysis when no key is set) appear as `null`. Bulk output (`--file`) is a JSON array.
 
 ### Pipe JSON to jq
 
@@ -422,7 +439,7 @@ scope-recon 1.2.3.4 --json | jq '.virustotal.malicious'
 scope-recon 1.2.3.4 --json | jq '.otx.pulse_names'
 scope-recon 1.2.3.4 --json | jq '.threatfox.iocs[].malware'
 scope-recon 1.2.3.4 --json | jq '.shodan.services[] | "\(.port)/\(.transport) \(.product // "-")"'
-scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 then "MALICIOUS" else "CLEAN" end)}'
+scope-recon 1.2.3.4 --json | jq '.ai_analysis.analysis'
 ```
 
 ## Error Handling
@@ -439,6 +456,8 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 | Pulsedive unknown (IP not in database) | Shows `risk: unknown`, not an error |
 | IPinfo without token | Works with shared rate limit (1,000 req/day); privacy fields absent |
 | Shodan key not set | Falls back to InternetDB automatically (no key required) |
+| `OPENROUTER_API_KEY` not set | AI Analysis shows `✗`; all other sources unaffected |
+| OpenRouter API error | AI Analysis shows error message; verdict and other sources unaffected |
 | Invalid IP or hostname passed | Rejected immediately before any API calls |
 | CIDR range exceeds 256 hosts | Rejected with a clear error message |
 | Cache entry expired | Silently re-queries all sources |
@@ -459,6 +478,7 @@ scope-recon 1.2.3.4 --json | jq '{ip, verdict: (if .virustotal.malicious > 0 the
 | IPQualityScore | 1,000 lookups/month (free tier) |
 | Pulsedive | 250 requests/day (free tier) |
 | IPinfo | 1,000 req/day unauthenticated; 50,000/month with free token |
+| OpenRouter / Grok | Pay-per-token; see https://openrouter.ai/pricing |
 
 ## Project Structure
 
@@ -467,16 +487,17 @@ scope-recon/
 ├── Cargo.toml
 └── src/
     ├── main.rs           # CLI dispatch, TUI mode detection, bulk/CIDR expansion,
-    │                     # cache integration, concurrent query orchestration, tests
+    │                     # cache integration, concurrent query orchestration,
+    │                     # sequential AI call after join!, tests
     ├── cli.rs            # Clap CLI struct and all flags
-    ├── model.rs          # ThreatReport and all summary structs (Serialize + Deserialize)
+    ├── model.rs          # ThreatReport and all summary structs (Serialize + Deserialize + Clone)
     ├── cache.rs          # On-disk cache load/save with TTL, tests
     ├── output.rs         # pretty_print(), json_print(), compute_verdict()
     ├── tui/
     │   ├── mod.rs        # run_tui(), terminal setup/teardown, tokio::select! event loop,
-    │   │                 # spawn_queries() — one task per source
+    │   │                 # spawn_queries(), all_sources_terminal(), AI trigger logic
     │   ├── app.rs        # App state, SourceState<T>, SourceUpdate, handle_key(), apply_update()
-    │   └── ui.rs         # render() — header, source list, detail pane, footer
+    │   └── ui.rs         # render() — header, source list, detail pane, footer, build_partial_report()
     └── api/
         ├── mod.rs
         ├── retry.rs      # Generic 429-aware retry wrapper
@@ -491,7 +512,8 @@ scope-recon/
         ├── bgpview.rs    # RIPE Stat BGP routing, ASN, prefix (no key)
         ├── ipqs.rs       # IPQualityScore fraud/proxy/VPN/bot detection
         ├── pulsedive.rs  # Pulsedive aggregated risk and threat feeds
-        └── ipinfo.rs     # IPinfo hostname, org, timezone, privacy flags
+        ├── ipinfo.rs     # IPinfo hostname, org, timezone, privacy flags
+        └── openrouter.rs # OpenRouter/Grok streaming AI analysis (TUI) and batch (CLI)
 ```
 
 ## License

@@ -1,7 +1,8 @@
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use crate::model::{
-    AbuseIPDBSummary, BGPViewSummary, GreyNoiseSummary, IPAPISummary, IPInfoSummary,
-    IPQSSummary, OTXSummary, PulsediveSummary, ShodanSummary, ThreatFoxSummary, VirusTotalSummary,
+    AbuseIPDBSummary, AiAnalysisSummary, BGPViewSummary, GreyNoiseSummary, IPAPISummary,
+    IPInfoSummary, IPQSSummary, OTXSummary, PulsediveSummary, ShodanSummary, ThreatFoxSummary,
+    VirusTotalSummary,
 };
 
 pub enum SourceState<T> {
@@ -23,6 +24,7 @@ pub enum SourceUpdate {
     Ipqs(anyhow::Result<IPQSSummary>),
     Pulsedive(anyhow::Result<PulsediveSummary>),
     IpInfo(anyhow::Result<IPInfoSummary>),
+    AiAnalysis(anyhow::Result<AiAnalysisSummary>),
 }
 
 pub const SOURCE_NAMES: &[&str] = &[
@@ -37,6 +39,7 @@ pub const SOURCE_NAMES: &[&str] = &[
     "IPQS",
     "Pulsedive",
     "IPInfo",
+    "AI Analysis",
 ];
 
 pub struct App {
@@ -57,6 +60,7 @@ pub struct App {
     pub ipqs:      SourceState<IPQSSummary>,
     pub pulsedive: SourceState<PulsediveSummary>,
     pub ipinfo:    SourceState<IPInfoSummary>,
+    pub ai_analysis: SourceState<AiAnalysisSummary>,
 }
 
 impl App {
@@ -79,6 +83,7 @@ impl App {
             ipqs:      SourceState::Loading,
             pulsedive: SourceState::Loading,
             ipinfo:    SourceState::Loading,
+            ai_analysis: SourceState::Loading,
         }
     }
 
@@ -94,6 +99,7 @@ impl App {
         self.ipqs      = SourceState::Loading;
         self.pulsedive = SourceState::Loading;
         self.ipinfo    = SourceState::Loading;
+        self.ai_analysis = SourceState::Loading;
         self.detail_scroll = 0;
         self.refresh_requested = false;
     }
@@ -242,6 +248,14 @@ impl App {
             }
             SourceUpdate::IpInfo(r) => {
                 self.ipinfo = match r {
+                    Ok(v) => SourceState::Done(v),
+                    Err(e) => {
+                        if e.to_string() == "__skipped__" { SourceState::Skipped } else { SourceState::Error(e.to_string()) }
+                    }
+                };
+            }
+            SourceUpdate::AiAnalysis(r) => {
+                self.ai_analysis = match r {
                     Ok(v) => SourceState::Done(v),
                     Err(e) => {
                         if e.to_string() == "__skipped__" { SourceState::Skipped } else { SourceState::Error(e.to_string()) }

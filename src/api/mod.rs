@@ -1,4 +1,5 @@
 pub mod abuseipdb;
+pub mod openrouter;
 pub mod bgpview;
 pub mod greynoise;
 pub mod internetdb;

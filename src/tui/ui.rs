@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::model::ThreatReport;
+use crate::model::{AiAnalysisSummary, ThreatReport};
 use crate::output::compute_verdict;
 use super::app::{App, SOURCE_NAMES, SourceState};
 
@@ -83,6 +83,7 @@ fn render_sources(f: &mut Frame, app: &App, area: Rect) {
                 9 => source_icon(&app.pulsedive, spin),
                 10 => source_icon(&app.ipinfo, spin),
                 6 => source_icon(&app.threatfox, spin),
+                11 => source_icon(&app.ai_analysis, spin),
                 _ => ("?".to_string(), Style::default()),
             };
             let line = Line::from(vec![
@@ -133,6 +134,7 @@ fn render_detail(f: &mut Frame, app: &App, area: Rect) {
         8 => ("IPQUALITYSCORE", detail_ipqs(app)),
         9 => ("PULSEDIVE", detail_pulsedive(app)),
         10 => ("IPINFO  (ipinfo.io)", detail_ipinfo(app)),
+        11 => ("AI ANALYSIS  (Grok via OpenRouter)", detail_ai_analysis(app)),
         _ => ("", vec![]),
     };
 
@@ -436,6 +438,28 @@ fn detail_threatfox(app: &App) -> Vec<Line<'static>> {
     }
 }
 
+fn detail_ai_analysis(app: &App) -> Vec<Line<'static>> {
+    match &app.ai_analysis {
+        SourceState::Loading => loading(),
+        SourceState::Skipped => skipped(),
+        SourceState::Error(e) => vec![Line::from(Span::styled(
+            format!("  Error: {}", e),
+            Style::default().fg(Color::Red),
+        ))],
+        SourceState::Done(v) => {
+            let mut lines = vec![Line::raw("")];
+            for line in v.analysis.lines() {
+                if line.is_empty() {
+                    lines.push(Line::raw(""));
+                } else {
+                    lines.push(Line::raw(format!("  {}", line)));
+                }
+            }
+            lines
+        }
+    }
+}
+
 /// Build a partial ThreatReport from current app state for verdict computation.
 pub fn build_partial_report(app: &App) -> ThreatReport {
     ThreatReport {
@@ -583,6 +607,11 @@ pub fn build_partial_report(app: &App) -> ThreatReport {
                 is_tor: v.is_tor,
                 is_hosting: v.is_hosting,
             })
+        } else {
+            None
+        },
+        ai_analysis: if let SourceState::Done(v) = &app.ai_analysis {
+            Some(AiAnalysisSummary { analysis: v.analysis.clone() })
         } else {
             None
         },

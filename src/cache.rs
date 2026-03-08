@@ -63,6 +63,7 @@ mod tests {
             ipqs: None,
             pulsedive: None,
             ipinfo: None,
+            ai_analysis: None,
         }
     }
 

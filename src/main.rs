@@ -23,6 +23,7 @@ use api::{
     ipapi::fetch_ipapi,
     ipinfo::fetch_ipinfo,
     ipqs::fetch_ipqs,
+    openrouter::fetch_openrouter,
     otx::fetch_otx,
     pulsedive::fetch_pulsedive,
     retry::with_retry,
@@ -48,6 +49,7 @@ struct ApiKeys {
     pulsedive: Option<String>,
     ipinfo: Option<String>,
     threatfox: Option<String>,
+    openrouter: Option<String>,
 }
 
 impl ApiKeys {
@@ -62,6 +64,7 @@ impl ApiKeys {
             pulsedive: std::env::var("PULSEDIVE_API_KEY").ok(),
             ipinfo: std::env::var("IPINFO_TOKEN").ok(),
             threatfox: std::env::var("THREATFOX_API_KEY").ok(),
+            openrouter: std::env::var("OPENROUTER_API_KEY").ok(),
         }
     }
 }
@@ -256,7 +259,8 @@ async fn query_ip(ip: &str, keys: &ApiKeys, cli: &Cli) -> (ThreatReport, Vec<(St
 
     let queried_at = chrono::Utc::now().to_rfc3339();
 
-    let report = ThreatReport {
+    // Build partial report from the 11 sources first
+    let partial = ThreatReport {
         queried_at,
         ip: ip.to_string(),
         ipapi: collect("ip-api", ipapi_res, &mut errors),
@@ -270,6 +274,22 @@ async fn query_ip(ip: &str, keys: &ApiKeys, cli: &Cli) -> (ThreatReport, Vec<(St
         ipqs: collect("IPQualityScore", ipqs_res, &mut errors),
         pulsedive: collect("Pulsedive", pd_res, &mut errors),
         ipinfo: collect("IPInfo", ii_res, &mut errors),
+        ai_analysis: None,
+    };
+
+    // Sequential AI call — naturally waits since join! already finished
+    let ai_res = if should_run(only, "openrouter") {
+        match keys.openrouter.as_deref() {
+            Some(k) => fetch_openrouter(&partial, k).await,
+            None => Err(anyhow::anyhow!("OPENROUTER_API_KEY not set")),
+        }
+    } else {
+        Err(anyhow::anyhow!("__skipped__"))
+    };
+
+    let report = ThreatReport {
+        ai_analysis: collect("AI Analysis", ai_res, &mut errors),
+        ..partial
     };
 
     (report, errors)

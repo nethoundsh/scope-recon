@@ -20,6 +20,7 @@ use crate::{
         ipapi::fetch_ipapi,
         ipinfo::fetch_ipinfo,
         ipqs::fetch_ipqs,
+        openrouter::stream_openrouter,
         otx::fetch_otx,
         pulsedive::fetch_pulsedive,
         retry::with_retry,
@@ -29,12 +30,13 @@ use crate::{
     },
     cache,
     cli::Cli,
+    model::ThreatReport,
 };
 
 pub mod app;
 pub mod ui;
 
-use app::{App, SourceUpdate};
+use app::{App, SourceState, SourceUpdate};
 
 const RETRY_DELAY: Duration = Duration::from_secs(2);
 
@@ -79,6 +81,12 @@ async fn run_loop<B: ratatui::backend::Backend>(
     // Only spawn queries for sources not already Done from cache
     spawn_queries(ip, keys, cli, tx.clone(), &app).await;
 
+    // Track whether AI has been triggered (already Done from cache counts)
+    let mut ai_triggered = matches!(app.ai_analysis, SourceState::Done(_));
+
+    // Handle case where all 11 sources loaded from cache but AI is not cached
+    maybe_trigger_ai(&mut ai_triggered, &app, keys, cli, tx.clone()).await;
+
     let mut event_stream = EventStream::new();
 
     loop {
@@ -91,6 +99,7 @@ async fn run_loop<B: ratatui::backend::Backend>(
             }
             Some(update) = rx.recv() => {
                 app.apply_update(update);
+                maybe_trigger_ai(&mut ai_triggered, &app, keys, cli, tx.clone()).await;
             }
         }
 
@@ -102,21 +111,87 @@ async fn run_loop<B: ratatui::backend::Backend>(
 
         if app.refresh_requested {
             app.reset_for_refresh();
+            ai_triggered = false;
             // Drain any pending updates from old tasks
-            while let Ok(_) = rx.try_recv() {}
+            while rx.try_recv().is_ok() {}
             let (new_tx, new_rx) = mpsc::channel::<SourceUpdate>(32);
             rx = new_rx;
             // Bypass cache on refresh
             let mut no_cache_cli = cli.clone();
             no_cache_cli.cache_ttl = 0;
-            spawn_queries(ip, keys, &no_cache_cli, new_tx, &app).await;
+            spawn_queries(ip, keys, &no_cache_cli, new_tx.clone(), &app).await;
+            maybe_trigger_ai(&mut ai_triggered, &app, keys, &no_cache_cli, new_tx).await;
         }
     }
 
     Ok(())
 }
 
-fn apply_cached_report(app: &mut App, report: crate::model::ThreatReport) {
+async fn maybe_trigger_ai(
+    ai_triggered: &mut bool,
+    app: &App,
+    keys: &ApiKeys,
+    cli: &Cli,
+    tx: mpsc::Sender<SourceUpdate>,
+) {
+    if *ai_triggered {
+        return;
+    }
+    if !should_run(&cli.only, "openrouter") {
+        *ai_triggered = true;
+        let _ = tx
+            .send(SourceUpdate::AiAnalysis(Err(anyhow::anyhow!("__skipped__"))))
+            .await;
+        return;
+    }
+    if !all_sources_terminal(app) {
+        return;
+    }
+
+    *ai_triggered = true;
+
+    match &keys.openrouter {
+        Some(key) => {
+            let report = build_report_for_ai(app);
+            let tx2 = tx.clone();
+            let key2 = key.clone();
+            tokio::spawn(async move {
+                if let Err(e) = stream_openrouter(&report, &key2, tx2.clone()).await {
+                    let _ = tx2
+                        .send(SourceUpdate::AiAnalysis(Err(e)))
+                        .await;
+                }
+            });
+        }
+        None => {
+            let _ = tx
+                .send(SourceUpdate::AiAnalysis(Err(anyhow::anyhow!(
+                    "OPENROUTER_API_KEY not set"
+                ))))
+                .await;
+        }
+    }
+}
+
+fn all_sources_terminal(app: &App) -> bool {
+    !matches!(app.ipapi, SourceState::Loading)
+        && !matches!(app.shodan, SourceState::Loading)
+        && !matches!(app.abuseipdb, SourceState::Loading)
+        && !matches!(app.virustotal, SourceState::Loading)
+        && !matches!(app.otx, SourceState::Loading)
+        && !matches!(app.greynoise, SourceState::Loading)
+        && !matches!(app.threatfox, SourceState::Loading)
+        && !matches!(app.bgpview, SourceState::Loading)
+        && !matches!(app.ipqs, SourceState::Loading)
+        && !matches!(app.pulsedive, SourceState::Loading)
+        && !matches!(app.ipinfo, SourceState::Loading)
+}
+
+fn build_report_for_ai(app: &App) -> ThreatReport {
+    ui::build_partial_report(app)
+}
+
+fn apply_cached_report(app: &mut App, report: ThreatReport) {
     if let Some(v) = report.ipapi {
         app.ipapi = app::SourceState::Done(v);
     }
@@ -149,6 +224,9 @@ fn apply_cached_report(app: &mut App, report: crate::model::ThreatReport) {
     }
     if let Some(v) = report.ipinfo {
         app.ipinfo = app::SourceState::Done(v);
+    }
+    if let Some(v) = report.ai_analysis {
+        app.ai_analysis = app::SourceState::Done(v);
     }
 }
 
